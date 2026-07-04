@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "geo.resolve",
+  "description": "Resolve a location UUID to a summary for cross-service reference checks. Returns {\"found\": bool, \"uuid\": str} and, when found, name/country/type/display_name. A missing UUID yields found=false (not an error).",
+  "type": "object",
+  "properties": {
+    "uuid": {
+      "type": "string",
+      "description": "Location UUID (cross-service reference)."
+    }
+  },
+  "required": ["uuid"],
+  "additionalProperties": false
+}

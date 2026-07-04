@@ -1,0 +1,62 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "stapel-geo"
+version = "0.1.0"
+description = "Geographic locations and geocoding for the Stapel framework"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.11"
+keywords = ["django", "stapel", "geo", "geohash", "geocoding", "postgis"]
+classifiers = [
+    "Framework :: Django",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+dependencies = [
+    "stapel-core>=0.3.0,<0.4",
+    "django-treenode>=0.20",
+    "pygeohash>=2",
+    "requests>=2.28",
+]
+
+[project.optional-dependencies]
+# Spatial extra: the location tree, GADM import and admin need the GDAL C
+# library + a spatial DB (PostGIS in production, SpatiaLite for tests). The
+# geohash math, geocoder proxy, comm surface and conf work WITHOUT this.
+geo = ["GDAL>=3.0"]
+all = ["GDAL>=3.0"]
+
+[tool.setuptools]
+package-dir = {"stapel_geo" = "."}
+packages = [
+    "stapel_geo",
+    "stapel_geo.migrations",
+    "stapel_geo.geocoding",
+    "stapel_geo.management",
+    "stapel_geo.management.commands",
+    "stapel_geo.tests",
+]
+
+[tool.setuptools.package-data]
+stapel_geo = [
+    "py.typed",
+    "migrations/*.py",
+    "schemas/**/*.json",
+    "geofiles/*.json",
+    "geofiles/*.py",
+    "geofiles/*.md",
+]
+
+[tool.pytest.ini_options]
+django_find_project = false
+addopts = "--tb=short -q --import-mode=importlib"
+
+[tool.coverage.run]
+omit = [
+    "*/tests/*",
+    "*/conftest.py",
+    "*/migrations/*",
+]
