@@ -36,6 +36,15 @@ exports). This lets tooling, the geocoder proxy, the geohash math and the
 comm surface run where GDAL is unavailable; only the location tree / GADM
 import / spatial HTTP views require the `geo` extra + a spatial DB.
 
+The initial spatial migration (`migrations/0001_initial.py`) is committed —
+`Location`/`GeoFile` with SRID-4326 geometry columns and the indexed centroid
+geohash. It applies on PostGIS (production; run `enable_postgis` first) and on
+SpatiaLite. CI installs `gdal-bin libgdal-dev libgeos-dev
+libsqlite3-mod-spatialite` and runs the full spatial suite against in-memory
+SpatiaLite (geometry columns register correctly there — no PostGIS service
+needed for CI). `djangorestframework-gis` is **not** required: geometry is
+serialized as GeoJSON via method fields.
+
 ## Extension points (fork-free)
 
 ### Settings — `STAPEL_GEO` namespace (`conf.py`)

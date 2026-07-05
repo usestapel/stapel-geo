@@ -16,6 +16,10 @@ standalone Stapel L2 module.
 - **GADM import**: `GeoFile` + `imports.GeoFileImporter` status machine
   (`pending → processing → completed/failed`, progress tracking) and the
   `enable_postgis` / `load_geofiles` management commands.
+- **Initial spatial migration** (`migrations/0001_initial.py`): `GeoFile` +
+  `Location` (SRID-4326 `MultiPolygonField`/`PointField`, indexed centroid
+  geohash, unique `uuid`, treenode tree fields). Generated and verified in a
+  Docker GDAL env; applies cleanly on SpatiaLite and PostGIS.
 - **Geohash proximity** (`geohash.py`): pure prefix-expansion nearby search
   and approximate-distance ranking; HTTP `nearby-by-coords` /
   `nearby-by-geohash` endpoints.
@@ -47,9 +51,25 @@ standalone Stapel L2 module.
 - Bulk GADM data is **no longer shipped** — only a tiny sample extract plus
   the flattening helper; hosts supply their own extracts (`GADM_FOLDER`).
 
+### Fixed
+- **Spatial-stack detection** (`tests/_support.py`): `HAS_GDAL` / `HAS_GEOS`
+  were removed in Django 4.0, so the old probe always raised and the spatial
+  suite skipped **even under a working GDAL/CI**. Now probes `gdal_version()` /
+  `geos_version()` directly — spatial tests run where GDAL is present and still
+  skip-with-reason where it is missing/broken.
+- **Spatial test URLconf** (`tests/urls.py`): mounts the geocoder proxy at
+  `geo/geocoding/` (matching the non-spatial URLconf and the geocoding HTTP
+  tests) so those tests resolve in spatial mode too, not only under
+  `api/geocoding/`.
+
 ### Notes
 - No GDPR consumer: locations are reference data, not user PII.
-- The initial **spatial migration is not committed** — it must be generated
-  in a GDAL environment (`makemigrations geo`); tests build the schema from
-  model state (`MIGRATION_MODULES`), and the spatial suite skips-with-reason
-  where GDAL is unavailable.
+- The initial **spatial migration is now committed** (`migrations/0001_initial.py`),
+  generated and verified in a Docker GDAL environment. The test suite still
+  builds its schema from model state via `MIGRATION_MODULES={"geo": None}`; the
+  spatial suite skips-with-reason only where GDAL is genuinely unavailable.
+- **CI spatial backend: SpatiaLite works** — the CI `libsqlite3-mod-spatialite`
+  step registers geometry columns (`geo_location.geometry`/`center`, SRID 4326,
+  spatial index enabled) and runs the full spatial suite in-memory. A real
+  PostGIS service is not required for CI; the same migration also applies on
+  `postgis/postgis`.
