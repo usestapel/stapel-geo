@@ -155,3 +155,26 @@ class TestGeocodeProxyHTTP:
     def test_provider_failure_is_502(self, api_client):
         resp = self._client(api_client).get("/geo/geocoding/search?q=x")
         assert resp.status_code == 502
+
+    @override_settings(STAPEL_GEO={"GEOCODER": "stapel_geo.tests.fakes.FakeGeocoder"})
+    @pytest.mark.parametrize("collision", ["query=boom", "self=boom", "params=boom"])
+    def test_search_ignores_params_colliding_with_method_kwargs(self, api_client, collision):
+        # M3: a query param whose name matches a provider-method parameter
+        # must be dropped, not forwarded as a kwarg (which would TypeError 500).
+        resp = self._client(api_client).get(f"/geo/geocoding/search?q=paris&{collision}")
+        assert resp.status_code == 200
+
+    @override_settings(STAPEL_GEO={"GEOCODER": "stapel_geo.tests.fakes.FakeGeocoder"})
+    @pytest.mark.parametrize("collision", ["lng=boom", "self=boom", "params=boom"])
+    def test_reverse_ignores_params_colliding_with_method_kwargs(self, api_client, collision):
+        resp = self._client(api_client).get(
+            f"/geo/geocoding/reverse?lat=49.6&lon=6.1&{collision}"
+        )
+        assert resp.status_code == 200
+
+    @override_settings(STAPEL_GEO={"GEOCODER": "stapel_geo.tests.fakes.FakeGeocoder"})
+    def test_oversized_limit_is_clamped(self, api_client):
+        # M3: an out-of-range limit is clamped, not forwarded verbatim (which
+        # could provoke an upstream 4xx later masked as a 502).
+        resp = self._client(api_client).get("/geo/geocoding/search?q=x&limit=999999999")
+        assert resp.status_code == 200

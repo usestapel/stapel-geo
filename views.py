@@ -6,6 +6,9 @@ validation, and GeoFile import management. Thin views over the ORM and the
 """
 from __future__ import annotations
 
+import math
+
+from django.core.exceptions import ValidationError
 from drf_spectacular.utils import OpenApiParameter, OpenApiTypes, extend_schema
 from rest_framework import viewsets
 from rest_framework.decorators import action
@@ -19,6 +22,7 @@ from .dto import ValidateUuidResponse
 from .errors import (
     ERR_400_GEOHASH_REQUIRED,
     ERR_400_INVALID_IMPORT_STATUS,
+    ERR_400_INVALID_PARAMS,
     ERR_400_LAT_LON_REQUIRED,
     ERR_400_UUID_REQUIRED,
 )
@@ -57,20 +61,29 @@ class LocationViewSet(viewsets.ModelViewSet):
         if len(search) < 2:
             queryset = self.get_queryset().filter(tn_parent__isnull=True).order_by("name")
             return Response(LocationCompactSerializer(queryset, many=True).data)
-        limit = min(int(request.query_params.get("limit", geo_settings.NEARBY_LIMIT)),
-                    geo_settings.NEARBY_MAX_LIMIT)
+        limit = self._parse_limit(request)
+        if limit is None:
+            return StapelErrorResponse(400, ERR_400_INVALID_PARAMS)
         queryset = self.get_queryset().filter(name__icontains=search).order_by("name")[:limit]
         return Response(LocationCompactSerializer(queryset, many=True).data)
 
     def get_object(self):
-        """Resolve a Location by integer id or by cross-service UUID."""
+        """Resolve a Location by integer id or by cross-service UUID.
+
+        A ``pk`` that is neither a known id nor a valid UUID is a miss (404),
+        not a 500 — Django raises ``ValidationError`` when a malformed UUID
+        reaches the query, so that is caught and treated as "not found".
+        """
         pk = self.kwargs.get("pk")
         queryset = self.get_queryset()
         if pk.isdigit():
             obj = queryset.filter(pk=int(pk)).first()
             if obj:
                 return obj
-        obj = queryset.filter(uuid=pk).first()
+        try:
+            obj = queryset.filter(uuid=pk).first()
+        except (ValidationError, ValueError):
+            obj = None
         if obj:
             return obj
         from django.http import Http404
@@ -95,7 +108,11 @@ class LocationViewSet(viewsets.ModelViewSet):
     def validate_uuid(self, request, uuid=None):
         if not uuid:
             return StapelErrorResponse(400, ERR_400_UUID_REQUIRED)
-        exists = self.get_queryset().filter(uuid=uuid).exists()
+        try:
+            exists = self.get_queryset().filter(uuid=uuid).exists()
+        except (ValidationError, ValueError):
+            # A malformed UUID is simply not valid — not a server error.
+            exists = False
         dto = ValidateUuidResponse(valid=exists, uuid=uuid)
         return Response(ValidateUuidResponseSerializer(dto).data)
 
@@ -116,8 +133,17 @@ class LocationViewSet(viewsets.ModelViewSet):
             lon = float(request.query_params.get("lon"))
         except (TypeError, ValueError):
             return StapelErrorResponse(400, ERR_400_LAT_LON_REQUIRED)
-        precision = max(1, min(12, int(request.query_params.get("precision",
-                                                                 geo_settings.NEARBY_PRECISION))))
+        # Reject NaN/inf and out-of-range coordinates — pygeohash.encode would
+        # otherwise raise on them (a 500 on user input).
+        if not (math.isfinite(lat) and math.isfinite(lon)):
+            return StapelErrorResponse(400, ERR_400_LAT_LON_REQUIRED)
+        if not (-90 <= lat <= 90) or not (-180 <= lon <= 180):
+            return StapelErrorResponse(400, ERR_400_LAT_LON_REQUIRED)
+        try:
+            precision = int(request.query_params.get("precision", geo_settings.NEARBY_PRECISION))
+        except (TypeError, ValueError):
+            return StapelErrorResponse(400, ERR_400_INVALID_PARAMS)
+        precision = max(1, min(12, precision))
         gh = geohash_utils.encode(lat, lon, precision=precision)
         return self._nearby_response(gh, request)
 
@@ -136,9 +162,18 @@ class LocationViewSet(viewsets.ModelViewSet):
             return StapelErrorResponse(400, ERR_400_GEOHASH_REQUIRED)
         return self._nearby_response(gh, request)
 
+    def _parse_limit(self, request):
+        """Coerce and clamp ``limit``; ``None`` signals an invalid value."""
+        try:
+            limit = int(request.query_params.get("limit", geo_settings.NEARBY_LIMIT))
+        except (TypeError, ValueError):
+            return None
+        return max(1, min(limit, geo_settings.NEARBY_MAX_LIMIT))
+
     def _nearby_response(self, gh: str, request):
-        limit = int(request.query_params.get("limit", geo_settings.NEARBY_LIMIT))
-        limit = max(1, min(limit, geo_settings.NEARBY_MAX_LIMIT))
+        limit = self._parse_limit(request)
+        if limit is None:
+            return StapelErrorResponse(400, ERR_400_INVALID_PARAMS)
         ranked = geohash_utils.nearby(
             gh, lambda p: list(self.get_queryset().filter(geohash__startswith=p)), limit
         )
@@ -161,12 +196,7 @@ class GeoFileViewSet(viewsets.ModelViewSet):
         geofile = self.get_object()
         if geofile.import_status not in (ImportStatus.FAILED, ImportStatus.PENDING):
             return StapelErrorResponse(400, ERR_400_INVALID_IMPORT_STATUS)
-        geofile.import_status = ImportStatus.PENDING
-        geofile.import_progress = 0
-        geofile.import_total = 0
-        geofile.import_error = ""
-        geofile.validation_result = ""
-        geofile.save()
+        geofile.restart_import()
         return Response(GeoFileSerializer(geofile).data)
 
 

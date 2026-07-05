@@ -16,6 +16,7 @@ import json
 import logging
 import threading
 import uuid as uuid_lib
+from functools import partial
 
 from django.contrib.gis.db import models as gis_models
 from django.contrib.gis.geos import (
@@ -38,11 +39,15 @@ logger = logging.getLogger(__name__)
 def fast_centroid(geom: GEOSGeometry, max_points: int | None = None) -> Point:
     """Centroid of *geom*, simplifying huge polygons first for performance.
 
-    Polygons under ``2 * max_points`` coordinates use the exact centroid;
+    Polygons under ``2 * max_points`` coordinates use the full geometry;
     larger ones are decimated (every Nth point) before the centroid is
     computed — a boundary's centroid barely moves under uniform decimation,
     but the cost drops sharply. ``max_points`` defaults to
     ``STAPEL_GEO["SIMPLIFY_MAX_POINTS"]``.
+
+    The centroid is computed antimeridian-aware (see
+    :func:`_antimeridian_safe_centroid`) so archipelago countries straddling
+    ±180° (Fiji, Chukotka, NZ) do not land in the wrong ocean.
     """
     if max_points is None:
         max_points = geo_settings.SIMPLIFY_MAX_POINTS
@@ -51,29 +56,101 @@ def fast_centroid(geom: GEOSGeometry, max_points: int | None = None) -> Point:
 
     total_points = geom.num_coords
     if total_points <= max_points * 2:
-        return geom.centroid
-
-    step = max(2, total_points // max_points)
-    if geom.geom_type == "Polygon":
-        simplified = _simplify_polygon(geom, step)
+        simplified = geom
     else:
-        simplified = MultiPolygon([_simplify_polygon(poly, step) for poly in geom])
-    return simplified.centroid
+        step = max(2, total_points // max_points)
+        if geom.geom_type == "Polygon":
+            simplified = _simplify_polygon(geom, step)
+        else:
+            simplified = MultiPolygon([_simplify_polygon(poly, step) for poly in geom])
+    return _antimeridian_safe_centroid(simplified)
+
+
+def _decimate_ring(ring: LinearRing, step: int) -> LinearRing | None:
+    """Take every *step*-th point of *ring*, re-closing it.
+
+    Returns ``None`` when fewer than 4 distinct points survive (a ring needs
+    4 coordinates including the repeated closing point) — the caller decides
+    what a collapsed ring means for its role (exterior vs hole).
+    """
+    coords = list(ring.coords)
+    simplified = coords[::step]
+    if simplified[0] != simplified[-1]:
+        simplified.append(simplified[0])
+    if len(simplified) < 4:
+        return None
+    return LinearRing(simplified)
 
 
 def _simplify_polygon(poly: Polygon, step: int) -> Polygon:
-    """Decimate a polygon's rings by taking every *step*-th point."""
-    simplified_rings = []
-    for ring in [poly.exterior_ring] + list(poly[1:]):
-        coords = list(ring.coords)
-        simplified_coords = coords[::step]
-        if simplified_coords[0] != simplified_coords[-1]:
-            simplified_coords.append(simplified_coords[0])
-        if len(simplified_coords) >= 4:
-            simplified_rings.append(LinearRing(simplified_coords))
-    if not simplified_rings:
+    """Decimate a polygon's rings, preserving which ring is the exterior.
+
+    The exterior ring is decimated as the exterior; a hole that collapses
+    to fewer than 4 points is dropped. Crucially, if the *exterior* ring
+    would collapse under decimation we return the polygon unsimplified —
+    otherwise a surviving hole would be promoted to the shell and the
+    centroid could land inside what used to be a hole.
+    """
+    exterior = _decimate_ring(poly.exterior_ring, step)
+    if exterior is None:
         return poly
-    return Polygon(simplified_rings[0], simplified_rings[1:] if len(simplified_rings) > 1 else [])
+    holes = []
+    for ring in poly[1:]:
+        decimated = _decimate_ring(ring, step)
+        if decimated is not None:
+            holes.append(decimated)
+    return Polygon(exterior, *holes)
+
+
+def _polygon_lons(poly: Polygon):
+    for ring in [poly.exterior_ring] + list(poly[1:]):
+        for x, _y in ring.coords:
+            yield x
+
+
+def _crosses_antimeridian(geom: GEOSGeometry) -> bool:
+    """True when *geom*'s longitude span exceeds 180° (antimeridian wrap).
+
+    A single contiguous landmass never spans more than 180° of longitude,
+    so a wider span means the geometry is split across ±180° and its planar
+    (naive) centroid would be dragged toward longitude 0.
+    """
+    polys = [geom] if geom.geom_type == "Polygon" else list(geom)
+    lons = [x for poly in polys for x in _polygon_lons(poly)]
+    if not lons:
+        return False
+    return (max(lons) - min(lons)) > 180
+
+
+def _shift_ring(ring: LinearRing) -> LinearRing:
+    return LinearRing([(x + 360 if x < 0 else x, y) for x, y in ring.coords])
+
+
+def _shift_polygon(poly: Polygon) -> Polygon:
+    exterior = _shift_ring(poly.exterior_ring)
+    holes = [_shift_ring(r) for r in poly[1:]]
+    return Polygon(exterior, *holes)
+
+
+def _antimeridian_safe_centroid(geom: GEOSGeometry) -> Point:
+    """Centroid of *geom*, correct for geometries straddling ±180°.
+
+    When the geometry crosses the antimeridian, western longitudes are
+    shifted into a continuous ``[0, 360)`` frame before the centroid is
+    taken, then the result is wrapped back into ``(-180, 180]``. Non-crossing
+    geometries use the plain centroid unchanged.
+    """
+    if geom.geom_type not in ("MultiPolygon", "Polygon") or not _crosses_antimeridian(geom):
+        return geom.centroid
+    if geom.geom_type == "Polygon":
+        shifted = _shift_polygon(geom)
+    else:
+        shifted = MultiPolygon([_shift_polygon(poly) for poly in geom])
+    centre = shifted.centroid
+    lon = centre.x
+    if lon > 180:
+        lon -= 360
+    return Point(lon, centre.y, srid=geom.srid)
 
 
 class GeoFile(models.Model):
@@ -107,10 +184,13 @@ class GeoFile(models.Model):
         return self.geo_json
 
     def _importer(self) -> GeoFileImporter:
+        from django.db import transaction
+
         return GeoFileImporter(
             self,
-            feature_importer=import_feature,
+            feature_importer=partial(import_feature, geo_file=self),
             emit=self._emit_completed,
+            atomic=transaction.atomic,
         )
 
     def _emit_completed(self, payload: dict) -> None:
@@ -131,6 +211,25 @@ class GeoFile(models.Model):
         super(GeoFile, instance).save()
         instance.run_import()
         return instance
+
+    def restart_import(self) -> None:
+        """Reset an already-persisted GeoFile and re-run its import.
+
+        The ``save()`` async trigger only fires for brand-new rows, so a retry
+        (the row already has a pk) must kick the import off explicitly —
+        otherwise the file would sit in ``pending`` forever. Honours
+        ``IMPORT_ASYNC``: background thread when set, synchronous otherwise.
+        """
+        self.import_status = ImportStatus.PENDING
+        self.import_progress = 0
+        self.import_total = 0
+        self.import_error = ""
+        self.validation_result = ""
+        self.save()  # existing row -> save() does not auto-trigger
+        if geo_settings.IMPORT_ASYNC:
+            self._start_async_import()
+        else:
+            self.run_import()
 
     def save(self, *args, **kwargs):
         is_new = self.pk is None
@@ -245,23 +344,29 @@ def _get_parent(child_level: int, props: dict):
     return location
 
 
-def import_feature(location_level: int, feature: dict) -> None:
+def import_feature(location_level: int, feature: dict, geo_file: "GeoFile | None" = None) -> None:
     """Upsert one GADM feature into a Location (GDAL geometry parsing).
 
     Injected into :class:`stapel_geo.imports.GeoFileImporter` as the
-    ``feature_importer`` — the status machine calls it per feature.
+    ``feature_importer`` — the status machine calls it per feature. The model
+    binds *geo_file* (the source :class:`GeoFile`) via ``functools.partial``
+    so every imported Location is traceable back to its file.
     """
     props = feature.get("properties", {})
     geometry = feature.get("geometry")
     if not geometry:
         raise ImportValidationError("feature geometry is missing")
 
+    g_id = props.get(f"GID_{location_level}")
+    if not g_id:
+        raise ImportValidationError(f"feature is missing GID_{location_level}")
+
     geom_obj = GEOSGeometry(json.dumps(geometry))
     if geom_obj.geom_type != "MultiPolygon":
         raise ImportValidationError("feature geometry should be a MultiPolygon")
 
     location, created = Location.objects.update_or_create(
-        g_id=props.get(f"GID_{location_level}"),
+        g_id=g_id,
         defaults={
             "name": _get_property(location_level, props, "NAME"),
             "varname": _get_property(location_level, props, "VARNAME"),
@@ -271,6 +376,7 @@ def import_feature(location_level: int, feature: dict) -> None:
             "hasc_code": _get_property(location_level, props, "HASC"),
             "geometry": geom_obj,
             "center": fast_centroid(geom_obj),
+            "geo_file": geo_file,
         },
     )
     if created:

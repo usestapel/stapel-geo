@@ -16,8 +16,11 @@
   progress tracking. Management commands `enable_postgis` and
   `load_geofiles`.
 - **Geohash proximity search** (`geohash.py`, pure): nearby-by-coords and
-  nearby-by-geohash via index-friendly prefix expansion + approximate
-  distance ranking. Exposed over HTTP and as the `geo.nearby` comm Function.
+  nearby-by-geohash via index-friendly prefix expansion over the target cell
+  **and its 8 neighbours**, ranked by true haversine `distance_km`, with an
+  authoritative full-scan fallback so nearest neighbours across a cell
+  boundary, the equator, the antimeridian or a pole are not lost. Exposed
+  over HTTP and as the `geo.nearby` comm Function.
 - **Geocoder proxy** (`geocoding/`): forward / structured / reverse
   geocoding behind a swappable **provider seam** (Photon by default),
   JWT-guarded, returning a normalized GeoJSON `GeocodeResponse`.

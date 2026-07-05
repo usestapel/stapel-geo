@@ -16,7 +16,8 @@ from __future__ import annotations
 import json
 import logging
 import re
-from typing import Callable, Optional, Protocol
+from contextlib import nullcontext
+from typing import Callable, ContextManager, Optional, Protocol
 
 from django.db import models
 
@@ -105,6 +106,12 @@ class GeoFileImporter:
         emit: optional ``callable(payload: dict)`` invoked once on success
             with the ``geo.import.completed`` payload.
         batch_size: how often progress is flushed to the store.
+        atomic: optional ``callable() -> context manager`` wrapping the
+            feature-import loop in a database transaction, so a mid-file
+            failure rolls back partially imported locations (leaving nothing
+            half-imported behind a ``failed`` status). The model injects
+            ``django.db.transaction.atomic``; left ``None`` (the default) the
+            machine stays DB-free for unit tests with a fake GeoFile.
     """
 
     def __init__(
@@ -114,11 +121,13 @@ class GeoFileImporter:
         feature_importer: Callable[[int, dict], None],
         emit: Optional[Callable[[dict], None]] = None,
         batch_size: int = 10,
+        atomic: Optional[Callable[[], ContextManager]] = None,
     ):
         self.geofile = geofile
         self.feature_importer = feature_importer
         self.emit = emit
         self.batch_size = batch_size
+        self.atomic = atomic
 
     def run(self) -> str:
         """Execute the import; returns the terminal status. Never raises —
@@ -153,12 +162,17 @@ class GeoFileImporter:
     def _import_features(self, level: int, features: list[dict]) -> None:
         gf = self.geofile
         total = len(features)
-        for i, feature in enumerate(features):
-            self.feature_importer(level, feature)
-            done = i + 1
-            if done % self.batch_size == 0 or done == total:
-                gf.import_progress = done
-                gf.save(update_fields=["import_progress"])
+        context = self.atomic() if self.atomic is not None else nullcontext()
+        # One transaction for the whole file: a failure on any feature rolls
+        # back the locations imported before it, so a ``failed`` GeoFile never
+        # leaves a partial set of locations behind.
+        with context:
+            for i, feature in enumerate(features):
+                self.feature_importer(level, feature)
+                done = i + 1
+                if done % self.batch_size == 0 or done == total:
+                    gf.import_progress = done
+                    gf.save(update_fields=["import_progress"])
 
     def _emit_completed(self, level: int, feature_count: int) -> None:
         if self.emit is None:

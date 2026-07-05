@@ -35,6 +35,17 @@ class Command(BaseCommand):
             self.stdout.write(self.style.WARNING(f"Folder {folder} does not exist; skipping."))
             return
 
+        if force:
+            # Clear prior GeoFile rows (and their stored files) so repeated
+            # --force runs re-import cleanly instead of piling up duplicate
+            # GeoFile rows. Locations are upserted by g_id and survive.
+            stale = list(GeoFile.objects.all())
+            for gf in stale:
+                gf.geo_json.delete(save=False)
+                gf.delete()
+            if stale:
+                self.stdout.write(f"Removed {len(stale)} existing GeoFile record(s) before re-import.")
+
         files = sorted(list(folder.glob("*.geojson")) + list(folder.glob("*.json")),
                        key=lambda f: f.name)
         if not files:
