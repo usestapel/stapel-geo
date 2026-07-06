@@ -138,6 +138,26 @@ No GDPR consumer is needed: locations are **reference data**, not user PII.
 `Location.uuid` is a cross-service reference for a place, not a person; the
 module stores no `AUTH_USER_MODEL` rows and subscribes to no `user.deleted`.
 
+## Admin categories (`@access`)
+
+Neither model carries an `@access` decorator — both stay on the implicit
+`@access.standard` (business) default.
+
+- **`Location`** is reference/domain data staff browse and correct (names,
+  hierarchy) — a textbook business table.
+- **`GeoFile`** *looks* ops-shaped (a `pending → processing →
+  completed/failed` status machine with progress counters, like a job
+  record), but staff are an intended creator of new rows, not just a viewer
+  of machine-written ones: `GeoFileAdmin` deliberately leaves `geo_json`
+  writable (only the status/progress/tracking fields are `readonly_fields`)
+  so uploading a new GADM extract through the admin's plain "Add" form is a
+  supported workflow, and `GeoFileViewSet` (a full DRF `ModelViewSet` behind
+  `ReadOnlyOrSuperUser`) lets a superuser create one over HTTP too, beside
+  the `load_geofiles` management command. `@access.ops` forbids add/change/
+  delete for *everyone including superuser* at the admin layer, which would
+  break that upload path — so `GeoFile` stays undecorated despite the
+  job-tracking shape.
+
 ## Anti-patterns
 
 - **Don't fork to change the geocoder** — implement the `Geocoder` ABC and
