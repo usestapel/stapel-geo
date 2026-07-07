@@ -14,9 +14,9 @@ from stapel_geo.tests.fakes import FakeGeoFile
 
 def _collection(level=2, n=3):
     return {
-        "name": f"gadm41_LUX_{level}",
+        "name": f"gadm41_TST_{level}",
         "type": "FeatureCollection",
-        "features": [{"properties": {"GID_%d" % level: f"LUX.{i}"}} for i in range(n)],
+        "features": [{"properties": {"GID_%d" % level: f"TST.{i}"}} for i in range(n)],
     }
 
 
@@ -27,12 +27,12 @@ class TestParseGeojson:
         assert len(features) == 3
 
     def test_missing_level_suffix_rejected(self):
-        bad = {"name": "gadm41_LUX", "type": "FeatureCollection", "features": []}
+        bad = {"name": "gadm41_TST", "type": "FeatureCollection", "features": []}
         with pytest.raises(ImportValidationError):
             parse_geojson(io.BytesIO(_json(bad)))
 
     def test_non_featurecollection_rejected(self):
-        bad = {"name": "gadm41_LUX_0", "type": "Feature", "features": []}
+        bad = {"name": "gadm41_TST_0", "type": "Feature", "features": []}
         with pytest.raises(ImportValidationError):
             parse_geojson(io.BytesIO(_json(bad)))
 

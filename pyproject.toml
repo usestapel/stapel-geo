@@ -40,8 +40,8 @@ Issues = "https://github.com/usestapel/stapel-geo/issues"
 # Spatial extra: the location tree, GADM import and admin need the GDAL C
 # library + a spatial DB (PostGIS in production, SpatiaLite for tests). The
 # geohash math, geocoder proxy, comm surface and conf work WITHOUT this.
-geo = ["GDAL>=3.0"]
-all = ["GDAL>=3.0"]
+spatial = ["GDAL>=3.0"]
+all = ["stapel-geo[spatial]"]
 
 [tool.setuptools]
 package-dir = {"stapel_geo" = "."}
@@ -58,7 +58,6 @@ stapel_geo = [
     "py.typed",
     "migrations/*.py",
     "schemas/**/*.json",
-    "geofiles/*.json",
     "geofiles/*.py",
     "geofiles/*.md",
 ]

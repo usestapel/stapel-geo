@@ -125,12 +125,12 @@ Emitted only on the async import path (`IMPORT_ASYNC=True`). Subscribers
 
 ## Hosts supply their own GADM data
 
-The wheel ships **only** a tiny sample (`geofiles/gadm41_LUX_0.json`) plus
-the flattening helper — not bulk boundaries. GADM data is non-commercial-
-licensed and large; download your own extracts from
+The wheel ships **no** bulk boundaries and no sample extract — only the
+flattening helper (`geofiles/flatten_hierarchy.py`). GADM data is
+non-commercial-licensed and large; download your own extracts from
 [gadm.org](https://gadm.org/) and point `STAPEL_GEO["GADM_FOLDER"]` (or
 `load_geofiles --folder`) at them. Each file's `name` must end in its depth
-level (`gadm41_LUX_2`).
+level (`gadm41_XXX_2`).
 
 ## GDPR
 

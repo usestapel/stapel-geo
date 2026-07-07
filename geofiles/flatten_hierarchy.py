@@ -1,16 +1,19 @@
 #!/usr/bin/env python3
 """
-Скрипт для упразднения уровня LUX_1 (дистрикты).
-Кантоны (LUX_2) будут ссылаться напрямую на страну (LUX_0).
+Скрипт для упразднения одного уровня иерархии GADM extract'а.
+Уровень N+1 будет ссылаться напрямую на уровень N-1.
 
-Что делает:
-1. LUX_2 -> становится LUX_1 (кантоны теперь на уровне 1)
-2. LUX_3 -> становится LUX_2 (коммуны теперь на уровне 2)
-3. Старый LUX_1 (дистрикты) удаляется
+Что делает (для страны с кодом <ISO>, упраздняя уровень 1):
+1. <ISO>_2 -> становится <ISO>_1
+2. <ISO>_3 -> становится <ISO>_2
+3. Старый <ISO>_1 удаляется
+
+Usage: flatten_hierarchy.py <ISO3-code>
 """
 import json
 import os
 import shutil
+import sys
 
 GEOFILES_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -72,45 +75,51 @@ def shift_level(input_file, output_file, level_shift=-1):
 
 
 def main():
+    if len(sys.argv) != 2:
+        print(f"Usage: {sys.argv[0]} <ISO3-code>", file=sys.stderr)
+        sys.exit(1)
+    iso = sys.argv[1].upper()
+
     # Бэкап оригинальных файлов
     backup_dir = os.path.join(GEOFILES_DIR, 'backup')
     os.makedirs(backup_dir, exist_ok=True)
 
-    for f in ['gadm41_LUX_1.json', 'gadm41_LUX_2.json', 'gadm41_LUX_3.json']:
+    for level in (1, 2, 3):
+        f = f'gadm41_{iso}_{level}.json'
         src = os.path.join(GEOFILES_DIR, f)
         if os.path.exists(src):
             shutil.copy2(src, os.path.join(backup_dir, f))
             print(f"Backup: {f}")
 
-    # LUX_2 (кантоны) -> LUX_1
+    # level 2 (кантоны) -> level 1
     shift_level(
-        os.path.join(GEOFILES_DIR, 'gadm41_LUX_2.json'),
-        os.path.join(GEOFILES_DIR, 'gadm41_LUX_1_new.json')
+        os.path.join(GEOFILES_DIR, f'gadm41_{iso}_2.json'),
+        os.path.join(GEOFILES_DIR, f'gadm41_{iso}_1_new.json')
     )
 
-    # LUX_3 (коммуны) -> LUX_2
+    # level 3 (коммуны) -> level 2
     shift_level(
-        os.path.join(GEOFILES_DIR, 'gadm41_LUX_3.json'),
-        os.path.join(GEOFILES_DIR, 'gadm41_LUX_2_new.json')
+        os.path.join(GEOFILES_DIR, f'gadm41_{iso}_3.json'),
+        os.path.join(GEOFILES_DIR, f'gadm41_{iso}_2_new.json')
     )
 
     # Заменяем файлы
     os.replace(
-        os.path.join(GEOFILES_DIR, 'gadm41_LUX_1_new.json'),
-        os.path.join(GEOFILES_DIR, 'gadm41_LUX_1.json')
+        os.path.join(GEOFILES_DIR, f'gadm41_{iso}_1_new.json'),
+        os.path.join(GEOFILES_DIR, f'gadm41_{iso}_1.json')
     )
     os.replace(
-        os.path.join(GEOFILES_DIR, 'gadm41_LUX_2_new.json'),
-        os.path.join(GEOFILES_DIR, 'gadm41_LUX_2.json')
+        os.path.join(GEOFILES_DIR, f'gadm41_{iso}_2_new.json'),
+        os.path.join(GEOFILES_DIR, f'gadm41_{iso}_2.json')
     )
 
-    # Удаляем старый LUX_3
-    os.remove(os.path.join(GEOFILES_DIR, 'gadm41_LUX_3.json'))
+    # Удаляем старый level 3
+    os.remove(os.path.join(GEOFILES_DIR, f'gadm41_{iso}_3.json'))
 
     print("\nDone! Hierarchy flattened:")
-    print("  Old LUX_1 (districts) -> removed")
-    print("  Old LUX_2 (cantons) -> new LUX_1")
-    print("  Old LUX_3 (communes) -> new LUX_2")
+    print("  Old level 1 (districts) -> removed")
+    print("  Old level 2 (cantons) -> new level 1")
+    print("  Old level 3 (communes) -> new level 2")
     print("\nBackups saved in:", backup_dir)
 
 

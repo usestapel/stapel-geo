@@ -51,7 +51,7 @@ def parse_geojson(fileobj) -> tuple[int, list[dict]]:
     """Validate a GADM GeoJSON file-like and return ``(level, features)``.
 
     The GADM depth level is taken from the collection ``name`` suffix
-    (``gadm41_LUX_2`` -> level 2). Raises :class:`ImportValidationError`
+    (``gadm41_XXX_2`` -> level 2). Raises :class:`ImportValidationError`
     for anything that is not a level-tagged ``FeatureCollection``. Pure —
     no GDAL, no geometry parsing (that happens per-feature downstream).
     """
@@ -64,7 +64,7 @@ def parse_geojson(fileobj) -> tuple[int, list[dict]]:
     name = data.get("name")
     if not name or not re.match(r".*_\d+$", name):
         raise ImportValidationError(
-            "GeoJSON 'name' should end with a depth level (e.g. gadm41_LUX_2)"
+            "GeoJSON 'name' should end with a depth level (e.g. gadm41_XXX_2)"
         )
     try:
         level = int(name.rsplit("_", 1)[-1])

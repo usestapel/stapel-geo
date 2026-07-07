@@ -17,9 +17,9 @@ _PHOTON_PAYLOAD = {
             "type": "Feature",
             "geometry": {"type": "Point", "coordinates": [6.13, 49.61]},
             "properties": {
-                "name": "Luxembourg",
-                "country": "Luxembourg",
-                "countrycode": "LU",
+                "name": "Testland",
+                "country": "Testland",
+                "countrycode": "TL",
                 "osm_key": "place",
                 "osm_value": "city",
                 "extraneous": "ignored",
@@ -65,17 +65,17 @@ class TestPhotonParsing:
     def test_search_parses_featurecollection(self, monkeypatch):
         captured = {}
         self._patch(monkeypatch, captured)
-        result = PhotonGeocoder().search("Luxembourg", lang="de", limit=5)
+        result = PhotonGeocoder().search("Testland", lang="de", limit=5)
         assert isinstance(result, GeocodeResponse)
         assert result.type == "FeatureCollection"
         assert len(result.features) == 1
         feature = result.features[0]
-        assert feature.properties.name == "Luxembourg"
+        assert feature.properties.name == "Testland"
         assert feature.geometry.coordinates == [6.13, 49.61]
         # unknown provider keys are dropped, not leaked into the DTO
         assert not hasattr(feature.properties, "extraneous")
         assert captured["url"].endswith("/api")
-        assert captured["params"]["q"] == "Luxembourg"
+        assert captured["params"]["q"] == "Testland"
         # None values (unset params) are stripped before the request
         assert all(v is not None for v in captured["params"].values())
 

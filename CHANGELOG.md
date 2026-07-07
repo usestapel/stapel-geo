@@ -91,8 +91,8 @@ Correctness pass on geohash proximity, centroids and HTTP input validation
 
 ## [0.1.0] — Unreleased
 
-Initial port of the location + geocoding domain from `legacy-geo` into a
-standalone Stapel L2 module.
+Initial port of the location + geocoding domain from the legacy geo module
+into a standalone Stapel L2 module.
 
 ### Added
 - **Location tree** (`Location`, GeoDjango + `django-treenode`): GADM
@@ -116,7 +116,7 @@ standalone Stapel L2 module.
 - `STAPEL_GEO` settings namespace, `error.*` keys, and `stapel_geo.W001/W002`
   system checks for the geocoder seam.
 
-### Changed (provenance — how this differs from `legacy-geo`)
+### Changed (provenance — how this differs from the legacy geo module)
 - **Geocoder generalized to a provider seam.** The source hardcoded a Photon
   proxy (`PHOTON_URL`, inline `requests` calls in the views). It is now the
   `Geocoder` ABC (`search`/`reverse`/`structured` → `GeocodeResponse`) with

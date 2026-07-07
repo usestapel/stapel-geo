@@ -47,7 +47,7 @@ class TestNearbyValidation:
 
 class TestListValidation:
     def test_bad_limit_on_search_is_400(self, api_client):
-        resp = api_client.get(f"{_LOC}?search=lux&limit=abc")
+        resp = api_client.get(f"{_LOC}?search=ber&limit=abc")
         assert resp.status_code == 400
 
 

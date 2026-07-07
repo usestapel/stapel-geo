@@ -15,8 +15,8 @@ without changing module code.
 ## Install
 
 ```bash
-pip install stapel-geo          # geohash math, geocoder proxy, comm surface
-pip install "stapel-geo[geo]"   # + the spatial layer (needs GDAL + a spatial DB)
+pip install stapel-geo              # geohash math, geocoder proxy, comm surface
+pip install "stapel-geo[spatial]"   # + the spatial layer (needs GDAL + a spatial DB)
 ```
 
 The location tree, GADM import and admin need the **GDAL** C library and a
@@ -73,8 +73,9 @@ call("geo.nearby", {"lat": 49.61, "lon": 6.13, "limit": 5})
 
 ## GADM data & geocoder providers
 
-The wheel ships only a tiny sample extract — **hosts supply their own GADM
-data** (see `geofiles/README.md`; non-commercial license). Swap the geocoder
+The wheel ships no bundled boundaries or sample extract — **hosts supply
+their own GADM data** (see `geofiles/README.md`; non-commercial license).
+Swap the geocoder
 by implementing the `Geocoder` ABC and setting `STAPEL_GEO["GEOCODER"]`.
 
 See [MODULE.md](MODULE.md) for every fork-free seam.

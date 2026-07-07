@@ -4,7 +4,7 @@ These require a working GDAL/GEOS stack and a spatial DB; when that is
 unavailable they are skipped WITH A REASON (see tests/_support.py), never
 silently dropped. Run them in CI with GDAL + SpatiaLite/PostGIS.
 """
-from pathlib import Path
+import json
 
 import pytest
 from django.test import override_settings
@@ -13,7 +13,24 @@ from stapel_geo.tests._support import requires_spatial
 
 pytestmark = [requires_spatial, pytest.mark.django_db]
 
-_SAMPLE = Path(__file__).resolve().parent.parent / "geofiles" / "gadm41_LUX_0.json"
+
+def _sample_country_geojson() -> bytes:
+    """A tiny synthetic level-0 GADM-shaped extract — no real GADM data,
+    licensed or otherwise, is bundled with the package."""
+    collection = {
+        "name": "gadm41_TST_0",
+        "type": "FeatureCollection",
+        "features": [
+            {
+                "properties": {"GID_0": "TST", "COUNTRY": "Testland"},
+                "geometry": {
+                    "type": "Polygon",
+                    "coordinates": [[[0, 0], [0, 2], [2, 2], [2, 0], [0, 0]]],
+                },
+            }
+        ],
+    }
+    return json.dumps(collection).encode()
 
 
 class TestFastCentroid:
@@ -135,13 +152,13 @@ def _square_multipolygon(x, y):
 
 class TestGadmImport:
     def test_sample_country_imports(self):
-        from django.core.files import File
+        from django.core.files.base import ContentFile
 
         from stapel_geo.imports import ImportStatus
         from stapel_geo.models import GeoFile, Location
 
-        with open(_SAMPLE, "rb") as fh:
-            geofile = GeoFile.create_and_import_sync(geo_json=File(fh, name=_SAMPLE.name))
+        payload = ContentFile(_sample_country_geojson(), name="sample.json")
+        geofile = GeoFile.create_and_import_sync(geo_json=payload)
 
         assert geofile.import_status == ImportStatus.COMPLETED
         assert geofile.location_level == 0
@@ -180,13 +197,13 @@ class TestGadmImport:
     def test_retry_reruns_the_import(self):
         # M4: retrying a stuck/failed GeoFile actually re-runs the import
         # (previously the async trigger only fired for brand-new rows).
-        from django.core.files import File
+        from django.core.files.base import ContentFile
 
         from stapel_geo.imports import ImportStatus
         from stapel_geo.models import GeoFile, Location
 
-        with open(_SAMPLE, "rb") as fh:
-            geofile = GeoFile.objects.create(geo_json=File(fh, name=_SAMPLE.name))
+        payload = ContentFile(_sample_country_geojson(), name="sample.json")
+        geofile = GeoFile.objects.create(geo_json=payload)
         # ASYNC off => create() did not import; simulate a prior failure.
         assert not Location.objects.exists()
         geofile.import_status = ImportStatus.FAILED

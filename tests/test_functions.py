@@ -59,13 +59,13 @@ class TestNearbySchema:
 
 class TestResolveFunction:
     def test_resolve_found(self, monkeypatch):
-        loc = NearbyCandidate("uuid-1", "Luxembourg", "Luxembourg", "u0v9", type="Country")
+        loc = NearbyCandidate("uuid-1", "Testland", "Testland", "u0v9", type="Country")
         monkeypatch.setattr(services, "_get_location_by_uuid", lambda u: loc)
         result = call("geo.resolve", {"uuid": "uuid-1"})
         assert result["found"] is True
-        assert result["name"] == "Luxembourg"
+        assert result["name"] == "Testland"
         assert result["type"] == "Country"
-        assert result["display_name"] == "Luxembourg (Country in Luxembourg)"
+        assert result["display_name"] == "Testland (Country in Testland)"
 
     def test_resolve_missing_is_not_an_error(self, monkeypatch):
         monkeypatch.setattr(services, "_get_location_by_uuid", lambda u: None)
