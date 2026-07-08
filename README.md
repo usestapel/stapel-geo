@@ -2,6 +2,7 @@
 
 [![CI](https://github.com/usestapel/stapel-geo/actions/workflows/ci.yml/badge.svg)](https://github.com/usestapel/stapel-geo/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/usestapel/stapel-geo/graph/badge.svg)](https://codecov.io/gh/usestapel/stapel-geo)
+[![PyPI](https://img.shields.io/pypi/v/stapel-geo.svg)](https://pypi.org/project/stapel-geo/)
 
 Geographic locations and geocoding for the [Stapel framework](https://github.com/usestapel) —
 composable Django apps that deploy as a monolith or as microservices
