@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "stapel-geo"
-version = "0.2.1"
+version = "0.2.2"
 description = "Geographic locations and geocoding for the Stapel framework"
 readme = "README.md"
 license = { text = "MIT" }
@@ -23,7 +23,7 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
-    "stapel-core>=0.8,<0.9",
+    "stapel-core>=0.10,<0.11",
     "django-treenode>=0.20",
     "pygeohash>=2",
     "requests>=2.28",
