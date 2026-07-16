@@ -1,26 +1,16 @@
-"""URL patterns — no global prefix here, the host project mounts them:
+"""Root URLconf — mounts the canonical versioned API (api-versioning.md §2).
+
+The host project mounts this module at its prefix::
 
     path("geo/", include("stapel_geo.urls"))
 
-Routes (relative to the mount):
-- ``api/locations/`` ... location tree, search, countries, nearby, validate-uuid
-- ``api/geofiles/``  ... GADM GeoFile import management
-- ``api/geocoding/`` ... geocoder proxy (search / structured / reverse)
-
-Importing this module pulls in the spatial views (GDAL). The geocoder
-proxy is GDAL-free and can be mounted on its own from
-``stapel_geo.geocoding.urls`` if the location tree is not wanted.
+which yields the canonical surface ``/geo/api/v1/...`` — the version
+segment sits immediately after ``api/`` and there is no bare unversioned
+path. The v1 patterns themselves live in ``urls_v1.py``; a future
+breaking change mounts ``urls_v2.py`` alongside, never replaces in place.
 """
 from django.urls import include, path
-from stapel_core.django.api.routers import OptionalSlashRouter
-
-from .views import GeoFileViewSet, LocationViewSet
-
-router = OptionalSlashRouter()
-router.register(r"locations", LocationViewSet, basename="location")
-router.register(r"geofiles", GeoFileViewSet, basename="geofile")
 
 urlpatterns = [
-    path("api/", include(router.urls)),
-    path("api/geocoding/", include("stapel_geo.geocoding.urls")),
+    path("api/v1/", include("stapel_geo.urls_v1")),
 ]

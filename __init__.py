@@ -1,37 +1,54 @@
 """stapel-geo — Geographic locations and geocoding for the Stapel framework.
 
 Public API (lazily exported, PEP 562 — importing this package never pulls
-in Django, GDAL, or a configured settings module):
+in Django or a configured settings module):
 
 - ``geo_settings`` — resolved app settings (``stapel_geo.conf``).
-- ``Geocoder`` / ``PhotonGeocoder`` / ``GeocoderError`` — the geocoder seam.
+- ``GeoSearchBackend`` / ``get_backend`` / ``PostgresGeoSearchBackend`` /
+  ``RedisGeoSearchBackend`` — the proximity-search facade.
+- ``Geocoder`` / ``GeocoderError`` / ``PhotonGeocoder`` /
+  ``NominatimGeocoder`` — the geocoder seam.
+- ``register_geocoder`` / ``registered_geocoders`` — the provider
+  merge-registry.
 - ``GeocodeResponse`` — normalized GeoJSON geocoding result.
-- ``ImportStatus`` / ``GeoFileImporter`` — the GDAL-free GADM import machine.
+- ``GeocodeCachePolicy`` — the geocode-cache seam.
 
-The spatial models (``Location``, ``GeoFile``) live in ``stapel_geo.models``
-and require GDAL + a spatial DB — import them explicitly, not from here.
+The models (``Location``, ``GeocodeCache``) live in ``stapel_geo.models``
+— import them explicitly, not from here.
 """
 
 __all__ = [
+    "GeoSearchBackend",
+    "GeocodeCachePolicy",
     "GeocodeResponse",
     "Geocoder",
     "GeocoderError",
-    "GeoFileImporter",
-    "ImportStatus",
+    "NominatimGeocoder",
     "PhotonGeocoder",
+    "PostgresGeoSearchBackend",
+    "RedisGeoSearchBackend",
     "geo_settings",
+    "get_backend",
+    "register_geocoder",
+    "registered_geocoders",
 ]
 
 # name -> submodule that defines it. Resolution is deferred until first
-# attribute access so that `import stapel_geo` stays Django-free / GDAL-free.
+# attribute access so that `import stapel_geo` stays Django-free.
 _LAZY_EXPORTS = {
     "geo_settings": ".conf",
+    "GeoSearchBackend": ".search.base",
+    "get_backend": ".search",
+    "PostgresGeoSearchBackend": ".search.postgres",
+    "RedisGeoSearchBackend": ".search.redis",
     "Geocoder": ".geocoding.base",
     "GeocoderError": ".geocoding.base",
     "PhotonGeocoder": ".geocoding.providers",
+    "NominatimGeocoder": ".geocoding.providers",
+    "register_geocoder": ".geocoding.providers",
+    "registered_geocoders": ".geocoding.providers",
     "GeocodeResponse": ".geocoding.dto",
-    "ImportStatus": ".imports",
-    "GeoFileImporter": ".imports",
+    "GeocodeCachePolicy": ".geocoding.cache",
 }
 
 

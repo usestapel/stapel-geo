@@ -1,8 +1,8 @@
-"""DRF views for the stapel-geo spatial API (loaded only with the app).
+"""DRF views for the stapel-geo location API (flat, GDAL-free).
 
-Location listing/search/countries/children, geohash proximity search, UUID
-validation, and GeoFile import management. Thin views over the ORM and the
-``geohash``/``services`` layers; errors use the StapelError envelope.
+Location listing/search/countries/children, proximity search through the
+search facade, and UUID validation. Thin views over the ORM and the
+``services`` layer; errors use the StapelError envelope.
 """
 from __future__ import annotations
 
@@ -12,24 +12,22 @@ from django.core.exceptions import ValidationError
 from drf_spectacular.utils import OpenApiParameter, OpenApiTypes, extend_schema
 from rest_framework import viewsets
 from rest_framework.decorators import action
-from rest_framework.response import Response
-from stapel_core.django.api.errors import StapelErrorResponse
+from stapel_core.django.api.errors import StapelErrorResponse, StapelResponse
 from stapel_core.django.api.permissions import ReadOnlyOrSuperUser
+from stapel_core.flows import flow_step
 
-from . import geohash as geohash_utils
+from . import services
 from .conf import geo_settings
 from .dto import ValidateUuidResponse
 from .errors import (
     ERR_400_GEOHASH_REQUIRED,
-    ERR_400_INVALID_IMPORT_STATUS,
     ERR_400_INVALID_PARAMS,
     ERR_400_LAT_LON_REQUIRED,
     ERR_400_UUID_REQUIRED,
 )
-from .imports import ImportStatus
-from .models import GeoFile, Location
+from .flows import LOCATION_BROWSE, LOCATION_NEARBY, LOCATION_RESOLVE
+from .models import Location
 from .serializers import (
-    GeoFileSerializer,
     LocationCompactSerializer,
     LocationSerializer,
     ValidateUuidResponseSerializer,
@@ -56,16 +54,18 @@ class LocationViewSet(viewsets.ModelViewSet):
                              description="Max results (default 10, max 50)."),
         ],
     )
+    @flow_step(LOCATION_BROWSE, order=1,
+               note="List root locations or search the tree by name")
     def list(self, request, *args, **kwargs):
         search = request.query_params.get("search", "").strip()
         if len(search) < 2:
             queryset = self.get_queryset().filter(tn_parent__isnull=True).order_by("name")
-            return Response(LocationCompactSerializer(queryset, many=True).data)
+            return StapelResponse(LocationCompactSerializer(queryset, many=True))
         limit = self._parse_limit(request)
         if limit is None:
             return StapelErrorResponse(400, ERR_400_INVALID_PARAMS)
         queryset = self.get_queryset().filter(name__icontains=search).order_by("name")[:limit]
-        return Response(LocationCompactSerializer(queryset, many=True).data)
+        return StapelResponse(LocationCompactSerializer(queryset, many=True))
 
     def get_object(self):
         """Resolve a Location by integer id or by cross-service UUID.
@@ -91,19 +91,23 @@ class LocationViewSet(viewsets.ModelViewSet):
 
     @extend_schema(summary="Countries (root locations)",
                    responses={200: LocationCompactSerializer(many=True)})
+    @flow_step(LOCATION_BROWSE, order=2, note="Fetch the root level (countries)")
     @action(detail=False, methods=["get"], url_path="countries")
     def countries(self, request):
         queryset = self.get_queryset().filter(tn_parent__isnull=True).order_by("name")
-        return Response(LocationCompactSerializer(queryset, many=True).data)
+        return StapelResponse(LocationCompactSerializer(queryset, many=True))
 
     @extend_schema(summary="Children of a location",
                    responses={200: LocationCompactSerializer(many=True)})
+    @flow_step(LOCATION_BROWSE, order=3, note="Drill into a node's children")
     @action(detail=False, methods=["get"], url_path=r"by-parent/(?P<parent_id>\d+)")
     def by_parent(self, request, parent_id=None):
         queryset = self.get_queryset().filter(tn_parent_id=parent_id).order_by("name")
-        return Response(LocationCompactSerializer(queryset, many=True).data)
+        return StapelResponse(LocationCompactSerializer(queryset, many=True))
 
     @extend_schema(responses={200: ValidateUuidResponseSerializer})
+    @flow_step(LOCATION_RESOLVE, order=1,
+               note="Check a location UUID exists (malformed = valid: false)")
     @action(detail=False, methods=["get"], url_path=r"validate-uuid/(?P<uuid>[^/.]+)")
     def validate_uuid(self, request, uuid=None):
         if not uuid:
@@ -114,7 +118,7 @@ class LocationViewSet(viewsets.ModelViewSet):
             # A malformed UUID is simply not valid — not a server error.
             exists = False
         dto = ValidateUuidResponse(valid=exists, uuid=uuid)
-        return Response(ValidateUuidResponseSerializer(dto).data)
+        return StapelResponse(ValidateUuidResponseSerializer(dto))
 
     @extend_schema(
         summary="Find nearby locations by coordinates",
@@ -126,6 +130,8 @@ class LocationViewSet(viewsets.ModelViewSet):
         ],
         responses={200: LocationCompactSerializer(many=True)},
     )
+    @flow_step(LOCATION_NEARBY, order=1,
+               note="Nearest locations to a coordinate (top-K, exact haversine)")
     @action(detail=False, methods=["get"], url_path="nearby-by-coords")
     def nearby_by_coords(self, request):
         try:
@@ -144,8 +150,11 @@ class LocationViewSet(viewsets.ModelViewSet):
         except (TypeError, ValueError):
             return StapelErrorResponse(400, ERR_400_INVALID_PARAMS)
         precision = max(1, min(12, precision))
-        gh = geohash_utils.encode(lat, lon, precision=precision)
-        return self._nearby_response(gh, request)
+        limit = self._parse_limit(request)
+        if limit is None:
+            return StapelErrorResponse(400, ERR_400_INVALID_PARAMS)
+        rows = services.nearby_rows_by_coords(lat, lon, precision, limit)
+        return StapelResponse(LocationCompactSerializer(rows, many=True))
 
     @extend_schema(
         summary="Find nearby locations by geohash",
@@ -155,12 +164,22 @@ class LocationViewSet(viewsets.ModelViewSet):
         ],
         responses={200: LocationCompactSerializer(many=True)},
     )
+    @flow_step(LOCATION_NEARBY, order=2,
+               note="Nearest locations to a geohash (decoded to its cell centre)")
     @action(detail=False, methods=["get"], url_path="nearby-by-geohash")
     def nearby_by_geohash(self, request):
         gh = request.query_params.get("geohash")
         if not gh:
             return StapelErrorResponse(400, ERR_400_GEOHASH_REQUIRED)
-        return self._nearby_response(gh, request)
+        limit = self._parse_limit(request)
+        if limit is None:
+            return StapelErrorResponse(400, ERR_400_INVALID_PARAMS)
+        try:
+            rows = services.nearby_rows_by_geohash(gh, limit)
+        except ValueError:
+            # pygeohash rejects non-geohash characters — user input, not a 500.
+            return StapelErrorResponse(400, ERR_400_GEOHASH_REQUIRED)
+        return StapelResponse(LocationCompactSerializer(rows, many=True))
 
     def _parse_limit(self, request):
         """Coerce and clamp ``limit``; ``None`` signals an invalid value."""
@@ -170,34 +189,5 @@ class LocationViewSet(viewsets.ModelViewSet):
             return None
         return max(1, min(limit, geo_settings.NEARBY_MAX_LIMIT))
 
-    def _nearby_response(self, gh: str, request):
-        limit = self._parse_limit(request)
-        if limit is None:
-            return StapelErrorResponse(400, ERR_400_INVALID_PARAMS)
-        ranked = geohash_utils.nearby(
-            gh, lambda p: list(self.get_queryset().filter(geohash__startswith=p)), limit
-        )
-        results = []
-        for loc, distance in ranked:
-            loc.distance_km = distance
-            results.append(loc)
-        return Response(LocationCompactSerializer(results, many=True).data)
 
-
-@extend_schema(tags=["GeoFiles"])
-class GeoFileViewSet(viewsets.ModelViewSet):
-    queryset = GeoFile.objects.all()
-    serializer_class = GeoFileSerializer
-    permission_classes = [ReadOnlyOrSuperUser]
-
-    @extend_schema(summary="Retry a failed import", responses={200: GeoFileSerializer})
-    @action(detail=True, methods=["post"], url_path="retry")
-    def retry_import(self, request, pk=None):
-        geofile = self.get_object()
-        if geofile.import_status not in (ImportStatus.FAILED, ImportStatus.PENDING):
-            return StapelErrorResponse(400, ERR_400_INVALID_IMPORT_STATUS)
-        geofile.restart_import()
-        return Response(GeoFileSerializer(geofile).data)
-
-
-__all__ = ["LocationViewSet", "GeoFileViewSet"]
+__all__ = ["LocationViewSet"]

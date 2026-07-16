@@ -1,25 +1,22 @@
 """Domain services of stapel-geo: proximity search and location resolution.
 
-The proximity algorithm itself lives in the GDAL-free ``geohash`` module;
-this layer only supplies the ORM query that turns a geohash prefix into
-candidate ``Location`` rows and shapes results for the comm/HTTP surface.
-The ``Location`` model is imported lazily (inside the query helpers), so
-importing this module does not require GDAL — the comm Functions can be
-exercised with the query helpers monkeypatched.
+Every search verb goes through the **search facade**
+(``stapel_geo.search.get_backend()`` — ``STAPEL_GEO["SEARCH_BACKEND"]``),
+so the comm Functions and the HTTP views share one code path regardless
+of the engine (Postgres geohash by default, Redis GEOSEARCH, ...).
+
+Backends answer in ``(uuid_key, distance_km)`` hits; this layer joins the
+keys back to ``Location`` rows (order-preserving) and shapes the compact
+cross-service summary dicts.
 """
 from __future__ import annotations
 
 from typing import Optional
 
-from . import geohash
+import pygeohash as pgh
+
 from .conf import geo_settings
-
-
-def _fetch_prefix(prefix: str) -> list:
-    """Every Location whose stored geohash starts with *prefix* (ORM)."""
-    from .models import Location
-
-    return list(Location.objects.filter(geohash__startswith=prefix))
+from .search import get_backend
 
 
 def _get_location_by_uuid(uuid: str):
@@ -27,6 +24,31 @@ def _get_location_by_uuid(uuid: str):
     from .models import Location
 
     return Location.objects.filter(uuid=uuid).first()
+
+
+def _rows_for_hits(hits: list) -> list:
+    """Join backend hits back to Location rows, preserving hit order.
+
+    *hits* are ``(uuid_key, distance_km)`` pairs or bare ``uuid_key``
+    strings (bbox). Rows get a ``distance_km`` attribute attached
+    (``None`` for distance-less verbs). Keys unknown to the table are
+    dropped — the side-index backends may lag the source of truth.
+    """
+    from .models import Location
+
+    normalized = [
+        (hit, None) if isinstance(hit, str) else (hit[0], hit[1]) for hit in hits
+    ]
+    keys = [key for key, _ in normalized]
+    by_uuid = {str(row.uuid): row for row in Location.objects.filter(uuid__in=keys)}
+    rows = []
+    for key, distance in normalized:
+        row = by_uuid.get(key)
+        if row is None:
+            continue
+        row.distance_km = distance
+        rows.append(row)
+    return rows
 
 
 def _summary(location, distance_km: Optional[float] = None) -> dict:
@@ -40,20 +62,75 @@ def _summary(location, distance_km: Optional[float] = None) -> dict:
     }
 
 
-def nearby_by_geohash(gh: str, limit: Optional[int] = None) -> list[dict]:
-    """Locations nearest to geohash *gh*, nearest-first, each with distance_km."""
-    limit = _clamp_limit(limit)
-    ranked = geohash.nearby(gh, _fetch_prefix, limit)
-    return [_summary(loc, distance) for loc, distance in ranked]
+# ---------------------------------------------------------------------------
+# nearby
+# ---------------------------------------------------------------------------
+
+
+def nearby_rows_by_coords(
+    lat: float, lon: float, precision: Optional[int] = None, limit: Optional[int] = None
+) -> list:
+    """Location rows nearest to a coordinate pair, nearest-first."""
+    hits = get_backend().nearby(
+        lat, lon, limit=_clamp_limit(limit), precision=precision
+    )
+    return _rows_for_hits(hits)
+
+
+def nearby_rows_by_geohash(gh: str, limit: Optional[int] = None) -> list:
+    """Location rows nearest to a geohash (decoded to its cell centre)."""
+    lat, lon = pgh.decode(gh)
+    hits = get_backend().nearby(
+        lat, lon, limit=_clamp_limit(limit), precision=len(gh)
+    )
+    return _rows_for_hits(hits)
 
 
 def nearby_by_coords(
     lat: float, lon: float, precision: Optional[int] = None, limit: Optional[int] = None
 ) -> list[dict]:
-    """Locations nearest to a coordinate pair (encoded to a geohash first)."""
-    precision = precision or geo_settings.NEARBY_PRECISION
-    precision = max(1, min(12, precision))
-    return nearby_by_geohash(geohash.encode(lat, lon, precision), limit)
+    return [
+        _summary(row, row.distance_km)
+        for row in nearby_rows_by_coords(lat, lon, precision, limit)
+    ]
+
+
+def nearby_by_geohash(gh: str, limit: Optional[int] = None) -> list[dict]:
+    return [
+        _summary(row, row.distance_km) for row in nearby_rows_by_geohash(gh, limit)
+    ]
+
+
+# ---------------------------------------------------------------------------
+# radius / bbox
+# ---------------------------------------------------------------------------
+
+
+def radius(
+    lat: float, lon: float, radius_km: float, limit: Optional[int] = None
+) -> list[dict]:
+    """Every location within *radius_km*, ascending distance (not top-K)."""
+    hits = get_backend().radius(lat, lon, radius_km, limit=_clamp_limit(limit))
+    return [_summary(row, row.distance_km) for row in _rows_for_hits(hits)]
+
+
+def bbox(
+    min_lat: float,
+    min_lon: float,
+    max_lat: float,
+    max_lon: float,
+    limit: Optional[int] = None,
+) -> list[dict]:
+    """Locations inside the rectangle (``min_lon > max_lon`` = antimeridian)."""
+    hits = get_backend().bbox(
+        min_lat, min_lon, max_lat, max_lon, limit=_clamp_limit(limit)
+    )
+    return [_summary(row) for row in _rows_for_hits(hits)]
+
+
+# ---------------------------------------------------------------------------
+# resolve
+# ---------------------------------------------------------------------------
 
 
 def resolve(uuid: str) -> dict:
@@ -81,4 +158,12 @@ def _clamp_limit(limit: Optional[int]) -> int:
     return max(1, min(int(limit), geo_settings.NEARBY_MAX_LIMIT))
 
 
-__all__ = ["nearby_by_geohash", "nearby_by_coords", "resolve"]
+__all__ = [
+    "nearby_by_geohash",
+    "nearby_by_coords",
+    "nearby_rows_by_geohash",
+    "nearby_rows_by_coords",
+    "radius",
+    "bbox",
+    "resolve",
+]

@@ -1,8 +1,6 @@
-"""Test doubles for the geocoder seam and the import status machine."""
+"""Test doubles for the geocoder seam, the search facade and geohash math."""
 from __future__ import annotations
 
-import io
-import json
 from dataclasses import dataclass
 from typing import Optional
 
@@ -24,7 +22,7 @@ def _feature(name: str, lon: float, lat: float) -> GeocodeFeature:
 
 
 class FakeGeocoder(Geocoder):
-    """Deterministic geocoder — swapped in via STAPEL_GEO['GEOCODER']."""
+    """Deterministic geocoder — registered via STAPEL_GEO['GEOCODERS']."""
 
     name = "fake"
 
@@ -37,6 +35,16 @@ class FakeGeocoder(Geocoder):
     def structured(self, *, lang=None, limit=None, **params):
         city = params.get("city", "structured")
         return GeocodeResponse(features=[_feature(city, 6.13, 49.61)])
+
+
+class CountingGeocoder(FakeGeocoder):
+    """FakeGeocoder that counts upstream calls (cache-hit assertions)."""
+
+    calls = 0
+
+    def search(self, query, *, lang=None, limit=None, **params):
+        type(self).calls += 1
+        return super().search(query, lang=lang, limit=limit, **params)
 
 
 class FailingGeocoder(Geocoder):
@@ -58,9 +66,13 @@ class NotAGeocoder:
     """Importable, but not a Geocoder subclass (checks.W002)."""
 
 
+class NotASearchBackend:
+    """Importable, but missing the facade verbs (checks.W004)."""
+
+
 @dataclass
 class NearbyCandidate:
-    """Minimal Location stand-in for geohash ranking / service tests."""
+    """Minimal Location stand-in for geohash ranking tests (pure math)."""
 
     uuid: str
     name: str
@@ -73,28 +85,73 @@ class NearbyCandidate:
         return f"{self.name} ({self.type} in {self.country})"
 
 
-class FakeGeoFile:
-    """Duck-typed GeoFile for the GDAL-free import status-machine tests.
+class FakeRedisGeo:
+    """Tiny in-memory stand-in for the redis-py GEO commands.
 
-    Records every ``save(update_fields=...)`` so tests can assert the exact
-    transition sequence.
+    Implements just enough (``geoadd``/``geosearch``/``zrem``/``delete``)
+    for RedisGeoSearchBackend unit tests, with haversine distances so
+    radius/nearby ordering is realistic.
     """
 
-    def __init__(self, features_json: dict | str, *, file_id=1):
-        if isinstance(features_json, dict):
-            features_json = json.dumps(features_json)
-        self._raw = features_json.encode("utf-8")
-        self.id = file_id
-        self.import_status = "pending"
-        self.import_progress = 0
-        self.import_total = 0
-        self.import_error = ""
-        self.location_level = 0
-        self.validation_result = ""
-        self.saved_fields: list[list[str]] = []
+    def __init__(self):
+        self.points: dict[str, tuple[float, float]] = {}  # member -> (lon, lat)
 
-    def open_geojson(self):
-        return io.BytesIO(self._raw)
+    # -- redis-py surface -------------------------------------------------
 
-    def save(self, *args, update_fields=None, **kwargs):
-        self.saved_fields.append(list(update_fields) if update_fields else [])
+    def geoadd(self, key, values):
+        lon, lat, member = values
+        self.points[str(member)] = (lon, lat)
+        return 1
+
+    def zrem(self, key, member):
+        return 1 if self.points.pop(str(member), None) is not None else 0
+
+    def delete(self, key):
+        self.points.clear()
+        return 1
+
+    def geosearch(
+        self,
+        key,
+        *,
+        longitude=None,
+        latitude=None,
+        radius=None,
+        width=None,
+        height=None,
+        unit="km",
+        withdist=False,
+        sort=None,
+        count=None,
+    ):
+        import math
+
+        def haversine_km(lat1, lon1, lat2, lon2):
+            r = 6371.0
+            p1, p2 = math.radians(lat1), math.radians(lat2)
+            dp = math.radians(lat2 - lat1)
+            dl = math.radians(lon2 - lon1)
+            a = math.sin(dp / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dl / 2) ** 2
+            return 2 * r * math.asin(math.sqrt(a))
+
+        hits = []
+        for member, (lon, lat) in self.points.items():
+            dist = haversine_km(latitude, longitude, lat, lon)
+            if radius is not None:
+                if dist <= radius:
+                    hits.append((member, dist))
+            else:
+                # BYBOX: approximate the box in km around the centre, with
+                # longitude wrapping — mirrors what the backend asks for.
+                dlat_km = abs(lat - latitude) * 111.32
+                dlon = abs((lon - longitude + 180) % 360 - 180)
+                dlon_km = dlon * 111.32 * math.cos(math.radians(latitude))
+                if dlat_km <= height / 2 and dlon_km <= width / 2:
+                    hits.append((member, dist))
+        if sort == "ASC":
+            hits.sort(key=lambda pair: pair[1])
+        if count is not None:
+            hits = hits[:count]
+        if withdist:
+            return [(m.encode(), d) for m, d in hits]
+        return [m.encode() for m, _ in hits]

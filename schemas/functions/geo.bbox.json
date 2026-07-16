@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "geo.bbox",
+  "description": "Locations inside a lat/lon rectangle (map viewport). min_lon > max_lon means the box crosses the antimeridian (the lon range wraps through ±180°). Returns {\"results\": [{uuid, name, country, geohash, distance_km: null}, ...]}. Served by the configured search backend (STAPEL_GEO[\"SEARCH_BACKEND\"]).",
+  "type": "object",
+  "properties": {
+    "min_lat": {"type": "number", "minimum": -90, "maximum": 90, "description": "Southern edge."},
+    "min_lon": {"type": "number", "minimum": -180, "maximum": 180, "description": "Western edge (may exceed max_lon across the antimeridian)."},
+    "max_lat": {"type": "number", "minimum": -90, "maximum": 90, "description": "Northern edge (>= min_lat)."},
+    "max_lon": {"type": "number", "minimum": -180, "maximum": 180, "description": "Eastern edge."},
+    "limit": {"type": "integer", "minimum": 1, "description": "Maximum number of results."}
+  },
+  "required": ["min_lat", "min_lon", "max_lat", "max_lon"],
+  "additionalProperties": false
+}

@@ -1,23 +1,28 @@
-"""Geocoder proxy views — JWT-guarded, provider-agnostic (GDAL-free).
+"""Geocoder proxy views — JWT-guarded, throttled, provider-agnostic.
 
-Each view resolves the configured provider through the ``GEOCODER`` seam,
-resolves the result language from the request, and returns a normalized
-GeoJSON FeatureCollection. Providers are swappable via
-``STAPEL_GEO["GEOCODER"]`` — these views never mention Photon by name.
+Each view goes through ``service.geocode()``: provider resolution by
+**name** (the ``GEOCODER``/``GEOCODERS`` merge-registry), cache lookup
+(``GEOCODE_CACHE_POLICY``), and a GeocodeCache ledger row per call.
+PAYG discipline: a ``ScopedRateThrottle`` (scope ``"geocoding"``, rate
+``STAPEL_GEO["GEOCODER_THROTTLE"]``) caps how fast any caller can burn a
+metered upstream key. These views never mention a provider by name.
 """
 from __future__ import annotations
 
 from drf_spectacular.utils import OpenApiParameter, OpenApiTypes, extend_schema
+from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 from stapel_core.core.language import parse_accept_language
 from stapel_core.django.api.errors import StapelErrorResponse, StapelResponse
 from stapel_core.django.api.permissions import IsNotAnonymousUser
+from stapel_core.flows import flow_step
 
 from ..errors import ERR_400_LAT_LON_REQUIRED, ERR_502_GEOCODER_UNAVAILABLE
+from ..flows import GEOCODE_ADDRESS
 from ..seams import SerializerSeamMixin
 from .base import GeocoderError
 from .serializers import GeocodeResponseSerializer
-from .service import get_geocoder
+from .service import geocode
 
 # Query params the proxy consumes itself, plus the names of the provider
 # methods' own parameters. Both are excluded from the forwarded extras: the
@@ -26,12 +31,28 @@ from .service import get_geocoder
 # and raises TypeError ("multiple values for argument") — a 500 on user
 # input. Everything else is passed through to the provider as extras.
 _PROXY_CONSUMED = {"q", "lat", "lon", "lang", "limit"}
-_METHOD_PARAMS = {"self", "query", "lat", "lng", "lon", "lang", "limit", "params"}
+_METHOD_PARAMS = {"self", "query", "lat", "lng", "lon", "lang", "limit", "params", "verb"}
 _RESERVED = _PROXY_CONSUMED | _METHOD_PARAMS
 
 # Upper bound for a forwarded ``limit`` so a user's oversized value cannot
 # provoke an upstream 4xx that would then be masked as a 502 "unavailable".
 _MAX_LIMIT = 50
+
+
+class GeocodingThrottle(ScopedRateThrottle):
+    """ScopedRateThrottle whose rate comes from ``STAPEL_GEO`` (lazily).
+
+    DRF resolves scoped rates from the global ``DEFAULT_THROTTLE_RATES``
+    setting; a library module cannot own that dict, so the rate is read
+    from the module namespace instead (``GEOCODER_THROTTLE``).
+    """
+
+    scope = "geocoding"
+
+    def get_rate(self):
+        from ..conf import geo_settings
+
+        return geo_settings.GEOCODER_THROTTLE
 
 
 def _resolve_lang(request):
@@ -68,6 +89,8 @@ def _respond(view, response):
 
 class _GeocodeView(SerializerSeamMixin, APIView):
     permission_classes = [IsNotAnonymousUser]
+    throttle_classes = [GeocodingThrottle]
+    throttle_scope = "geocoding"
     response_serializer_class = GeocodeResponseSerializer
 
 
@@ -84,12 +107,18 @@ class GeocodeSearchView(_GeocodeView):
         ],
         responses={200: GeocodeResponseSerializer},
     )
+    @flow_step(GEOCODE_ADDRESS, order=1,
+               note="Free-text forward geocoding (throttled, cached, ledgered)")
     def get(self, request):
         query = request.query_params.get("q", "")
         limit = _resolve_limit(request)
         try:
-            response = get_geocoder().search(
-                query, lang=_resolve_lang(request), limit=limit, **_extra_params(request)
+            response = geocode(
+                "search",
+                query=query,
+                lang=_resolve_lang(request),
+                limit=limit,
+                **_extra_params(request),
             )
         except GeocoderError:
             return StapelErrorResponse(502, ERR_502_GEOCODER_UNAVAILABLE)
@@ -110,6 +139,8 @@ class GeocodeReverseView(_GeocodeView):
         ],
         responses={200: GeocodeResponseSerializer},
     )
+    @flow_step(GEOCODE_ADDRESS, order=3,
+               note="Map pin to address (reverse geocoding)")
     def get(self, request):
         try:
             lat = float(request.query_params["lat"])
@@ -118,8 +149,13 @@ class GeocodeReverseView(_GeocodeView):
             return StapelErrorResponse(400, ERR_400_LAT_LON_REQUIRED)
         limit = _resolve_limit(request)
         try:
-            response = get_geocoder().reverse(
-                lat, lng, lang=_resolve_lang(request), limit=limit, **_extra_params(request)
+            response = geocode(
+                "reverse",
+                lat=lat,
+                lng=lng,
+                lang=_resolve_lang(request),
+                limit=limit,
+                **_extra_params(request),
             )
         except GeocoderError:
             return StapelErrorResponse(502, ERR_502_GEOCODER_UNAVAILABLE)
@@ -142,15 +178,25 @@ class GeocodeStructuredView(_GeocodeView):
         ],
         responses={200: GeocodeResponseSerializer},
     )
+    @flow_step(GEOCODE_ADDRESS, order=2,
+               note="Search by address components (city, street, postcode, ...)")
     def get(self, request):
         limit = _resolve_limit(request)
         try:
-            response = get_geocoder().structured(
-                lang=_resolve_lang(request), limit=limit, **_extra_params(request)
+            response = geocode(
+                "structured",
+                lang=_resolve_lang(request),
+                limit=limit,
+                **_extra_params(request),
             )
         except GeocoderError:
             return StapelErrorResponse(502, ERR_502_GEOCODER_UNAVAILABLE)
         return _respond(self, response)
 
 
-__all__ = ["GeocodeSearchView", "GeocodeReverseView", "GeocodeStructuredView"]
+__all__ = [
+    "GeocodingThrottle",
+    "GeocodeSearchView",
+    "GeocodeReverseView",
+    "GeocodeStructuredView",
+]

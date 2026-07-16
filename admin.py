@@ -1,29 +1,33 @@
-"""Admin for stapel-geo (spatial — loaded only with the app).
-
-Location uses the treenode + GeoDjango admin mixins; GeoFile is a mostly
-read-only import journal.
-"""
+"""Admin for stapel-geo — treenode Location editor + read-only geocode ledger."""
 from django.contrib import admin
-from django.contrib.gis.admin.options import GeoModelAdminMixin
 from treenode.admin import TreeNodeModelAdmin
 from treenode.forms import TreeNodeForm
 
-from .models import GeoFile, Location
-
-
-@admin.register(GeoFile)
-class GeoFileAdmin(admin.ModelAdmin):
-    list_display = ["id", "geo_json", "location_level", "import_status", "added"]
-    readonly_fields = [
-        "validation_result", "location_level", "added",
-        "import_status", "import_progress", "import_total", "import_error",
-    ]
+from .models import GeocodeCache, Location
 
 
 @admin.register(Location)
-class LocationAdmin(GeoModelAdminMixin, TreeNodeModelAdmin):
+class LocationAdmin(TreeNodeModelAdmin):
     treenode_display_mode = TreeNodeModelAdmin.TREENODE_DISPLAY_MODE_ACCORDION
     form = TreeNodeForm
-    list_display = ["name", "type", "country", "uuid", "g_id"]
-    readonly_fields = ["uuid"]
-    search_fields = ["name", "g_id", "uuid"]
+    list_display = ["name", "type", "country", "lat", "lon", "geohash", "uuid"]
+    readonly_fields = ["uuid", "geohash", "display_name_narrow", "display_name_broad"]
+    search_fields = ["name", "country", "uuid"]
+
+
+@admin.register(GeocodeCache)
+class GeocodeCacheAdmin(admin.ModelAdmin):
+    """The geocoder spend ledger — an audit journal, not an editor."""
+
+    list_display = ["provider", "verb", "status", "duration_ms", "lang", "created_at"]
+    list_filter = ["provider", "verb", "status"]
+    readonly_fields = [
+        "provider", "verb", "query_hash", "lang", "status",
+        "duration_ms", "response", "created_at",
+    ]
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False

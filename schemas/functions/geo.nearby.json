@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "geo.nearby",
-  "description": "Proximity search over the location tree. Provide either coordinates (lat+lon, optional precision) or a geohash. Returns {\"results\": [{uuid, name, country, geohash, distance_km}, ...]} nearest-first. distance_km is an approximate geohash distance for ranking, not exact geodesy.",
+  "description": "Proximity search over the location tree (top-K nearest). Provide either coordinates (lat+lon, optional precision) or a geohash. Returns {\"results\": [{uuid, name, country, geohash, distance_km}, ...]} nearest-first. distance_km is the exact great-circle (haversine) distance in km.",
   "type": "object",
   "properties": {
     "lat": {"type": "number", "minimum": -90, "maximum": 90, "description": "Latitude (with lon)."},
