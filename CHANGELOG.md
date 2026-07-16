@@ -4,6 +4,108 @@ All notable changes to stapel-geo are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Pre-1.0 semver: **minor = breaking**, patch = compatible.
 
+## [0.3.0] — 2026-07-16
+
+Geo v2 (geo-v2-redesign.md §63, owner directive): the module is now exactly
+"geohash proximity search + a generic geocoder facade" — **no GDAL, no
+PostGIS, no spatial database, ever**. Breaking release; alpha policy applies
+(drop & rebuild, no data migration path).
+
+### ⚠️ Removed (the PostGIS/GADM tail — gone as a class)
+- **`Location.geometry`** (`MultiPolygonField`) and **`Location.center`**
+  (`PointField`) — administrative boundary polygons and spatial
+  `ST_Contains`-style queries are no longer a feature of this module.
+- **`GeoFile` model + the whole GADM import machinery**: `imports.py`
+  (`GeoFileImporter`, `ImportStatus`, `parse_geojson`), `import_feature`,
+  `_get_property`/`_get_parent`, the `geo.import.completed` comm Action and
+  its emit schema, the GADM import HTTP surface (`GeoFileViewSet`, retry).
+- **`fast_centroid` and all polygon-simplification code**
+  (`_simplify_polygon`, `_decimate_ring`, `_antimeridian_safe_centroid`,
+  `_crosses_antimeridian`, `_shift_polygon`/`_shift_ring`) — that
+  antimeridian machinery existed only for GADM polygons, not points.
+- **Management commands** `enable_postgis` and `load_geofiles`; the
+  `geofiles/` folder (flattening helper + GADM instructions).
+- **`GeoModelAdminMixin`** spatial admin widget.
+- **Packaging**: the `spatial` extra and the `GDAL>=3.0` dependency; the
+  `stapel_geo.management` packages. CI no longer installs
+  gdal-bin/libgdal/SpatiaLite — the whole suite runs on SQLite, and the
+  25 GDAL skips-with-reason are gone as a class (149 passed / 0 skipped).
+- **Location fields dropped with GADM**: `g_id`, `varname`, `iso_code`,
+  `hasc_code`, `geo_file` FK.
+- Settings dropped: `SIMPLIFY_MAX_POINTS`, `GADM_FOLDER`, `IMPORT_ASYNC`.
+- Lazy exports dropped: `GeoFileImporter`, `ImportStatus`.
+
+### ⚠️ Migration note (breaking)
+- **Migrations were rebuilt from scratch** (alpha drop & rebuild):
+  `migrations/0001_initial.py` is regenerated for the flat schema. There is
+  no ALTER path from 0.2.x — drop the old `geo_*` tables and migrate fresh.
+- **`Location` is now a flat point**: new `lat`/`lon` (`FloatField`,
+  indexed) replace `center`; `geohash` is auto-encoded from them in
+  `save()`. The treenode hierarchy (country -> region -> city), `uuid`
+  cross-service reference and display names remain.
+- **HTTP canon `/geo/api/v1/...`** (api-versioning.md): the host mount
+  `path("geo/", include("stapel_geo.urls"))` now yields
+  `/geo/api/v1/locations/...` and `/geo/api/v1/geocoding/...` — the old
+  unversioned `/geo/api/...` paths are gone (no bare-path alias, per the
+  owner's clean-slate ruling).
+- **`STAPEL_GEO["GEOCODER"]` changed form**: a provider **name** from the
+  merge-registry (`"photon"`, default) instead of a dotted path. Custom
+  providers register via `STAPEL_GEO["GEOCODERS"] = {"name": "dotted.path"}`
+  or `register_geocoder()`.
+- **`Location` fills by hand or future flat CSV import** — GADM (heavy,
+  non-commercial license) left with the polygon layer; a GeoNames-style
+  management command is a separate task when demand is real.
+
+### Added
+- **Search facade** (`stapel_geo.search`): `GeoSearchBackend` protocol
+  (`nearby` / `radius` / `bbox`), swapped by
+  `STAPEL_GEO["SEARCH_BACKEND"]` (REPLACE semantics, §61 media pattern).
+  Hits are `(location uuid, distance_km)` pairs — engine-agnostic keys the
+  service layer joins back to rows.
+  - `PostgresGeoSearchBackend` (default, zero new infra): the proven
+    9-cell geohash neighbour machinery behind the facade; `radius()` picks
+    its starting cell size from `pygeohash.PRECISION_TO_ERROR` and filters
+    by exact haversine (membership, not top-K); `bbox()` is a flat indexed
+    `lat/lon BETWEEN` with the lon range split in two across the
+    antimeridian (`min_lon > max_lon`).
+  - `RedisGeoSearchBackend` (first scale backend, `pip install
+    stapel-geo[redis]`): `GEOADD`/`GEOSEARCH` side index (Redis is already
+    mandatory house infra), synced via `post_save`/`post_delete` receivers
+    when configured; the primary DB stays the source of truth;
+    `rebuild()` re-indexes.
+  - `ElasticsearchGeoSearchBackend` / `SolrGeoSearchBackend` stubs —
+    `NotImplementedError` with implementation pointers.
+- **comm Functions** `geo.radius`, `geo.bbox` and `geo.geohash_encode`
+  (pure lat/lon -> geohash so consumers like listings stamp their own
+  rows without importing geo), with JSON schemas; `geo.nearby`/`geo.radius`/
+  `geo.bbox` all route through the facade — one code path per verb.
+- **Geocoder provider merge-registry** (`BUILTIN_GEOCODERS` +
+  `STAPEL_GEO["GEOCODERS"]` + `register_geocoder()`, the stapel-agent
+  PROVIDERS pattern): `photon` (real, production default), `nominatim`
+  (real: public OSM API, keyless, self-enforced 1 rps politeness +
+  User-Agent — dev/fallback only), `google` / `yandex` (key-gated stubs;
+  hosts bring their own PAYG keys, stapel never bundles them).
+- **GeocodeCache ledger table**: one row per proxied geocoding call
+  (`provider`/`verb`/`status`/`duration_ms`) — spend visibility per
+  provider, the PromptLog pattern — doubling as the default cache storage
+  (`GEOCODE_CACHE_POLICY` seam, `LedgerCachePolicy`, 30-day TTL).
+- **Geocoder throttle**: DRF `ScopedRateThrottle` (scope `"geocoding"`),
+  rate from `STAPEL_GEO["GEOCODER_THROTTLE"]` (default `30/min`) — a
+  public endpoint cannot burn a metered upstream key unboundedly.
+- **Flows** (`geo.location_browse` / `geo.location_nearby` /
+  `geo.location_resolve` / `geo.geocode_address`) and the per-module
+  contract triad harness (`make contract` -> committed
+  `docs/{schema,flows,errors}.json` at the canonical `/geo/api/v1/`).
+- System checks `stapel_geo.W003`/`W004` for `SEARCH_BACKEND`;
+  `W001`/`W002` reworked for the name-based geocoder registry.
+
+### Fixed
+- `schemas/functions/geo.nearby.json` description still claimed
+  `distance_km` is "an approximate geohash distance" — stale since the
+  0.2.0 haversine fix; it now documents the exact great-circle distance.
+- HTTP views use `StapelResponse` throughout and every documented endpoint
+  belongs to a flow (`stapel-verify`: 0 errors, 0 warnings).
+
 ## [0.2.1] — Unreleased
 
 ### Changed

@@ -6,181 +6,143 @@
 
 ## What this module provides
 
-- **Location tree** (`models.Location`, GeoDjango + `django-treenode`):
-  hierarchical places with GADM boundary geometry, a simplified centroid
-  (`fast_centroid`), an indexed centroid **geohash**, and a stable
-  cross-service **UUID**.
-- **GADM import** (`models.GeoFile` + `imports.GeoFileImporter`): upload a
-  GADM GeoJSON extract, validate it, and stream its features into the tree
-  with a `pending → processing → completed/failed` status machine and
-  progress tracking. Management commands `enable_postgis` and
-  `load_geofiles`.
-- **Geohash proximity search** (`geohash.py`, pure): nearby-by-coords and
-  nearby-by-geohash via index-friendly prefix expansion over the target cell
-  **and its 8 neighbours**, ranked by true haversine `distance_km`, with an
-  authoritative full-scan fallback so nearest neighbours across a cell
-  boundary, the equator, the antimeridian or a pole are not lost. Exposed
-  over HTTP and as the `geo.nearby` comm Function.
+- **Location tree** (`models.Location`, `django-treenode`): hierarchical
+  reference places (country -> region -> city) as **flat points** —
+  `lat`/`lon` floats, an indexed `geohash` auto-encoded in `save()`, and a
+  stable cross-service **UUID**. No geometry columns, no GDAL, no spatial
+  DB — the PostGIS/GADM polygon layer was removed in 0.3.0.
+- **Proximity search facade** (`stapel_geo.search`): three verbs —
+  `nearby` (top-K nearest), `radius` (membership within N km), `bbox`
+  (rectangle, `min_lon > max_lon` = antimeridian wrap) — behind one
+  swappable backend key. The default backend runs geohash prefix
+  expansion over the primary DB (the proven 9-cell neighbour machinery:
+  equator/antimeridian/pole safe, exact-haversine ranked); Redis
+  `GEOSEARCH` ships as the first scale backend; ES/Solr are named stubs.
 - **Geocoder proxy** (`geocoding/`): forward / structured / reverse
-  geocoding behind a swappable **provider seam** (Photon by default),
-  JWT-guarded, returning a normalized GeoJSON `GeocodeResponse`.
-- **comm surface**: Functions `geo.nearby` / `geo.resolve` (so listings and
-  calendar/booking query geo by name, never importing it) and the
-  `geo.import.completed` Action.
-
-### GDAL-optional structure (important)
-
-Only `models.py`, `views.py`, `serializers.py`, `admin.py` and the spatial
-management command import **GDAL/GeoDjango**. Everything else — `geohash`,
-`geocoding/*`, `functions`, `actions`, `services`, `conf`, `errors`,
-`checks`, `imports` — is **GDAL-free** and importable without a spatial
-stack. `import stapel_geo` is Django-free and GDAL-free (PEP 562 lazy
-exports). This lets tooling, the geocoder proxy, the geohash math and the
-comm surface run where GDAL is unavailable; only the location tree / GADM
-import / spatial HTTP views require the `geo` extra + a spatial DB.
-
-The initial spatial migration (`migrations/0001_initial.py`) is committed —
-`Location`/`GeoFile` with SRID-4326 geometry columns and the indexed centroid
-geohash. It applies on PostGIS (production; run `enable_postgis` first) and on
-SpatiaLite. CI installs `gdal-bin libgdal-dev libgeos-dev
-libsqlite3-mod-spatialite` and runs the full spatial suite against in-memory
-SpatiaLite (geometry columns register correctly there — no PostGIS service
-needed for CI). `djangorestframework-gis` is **not** required: geometry is
-serialized as GeoJSON via method fields.
+  geocoding behind a provider **merge-registry**, JWT-guarded, throttled
+  (scope `"geocoding"`), cached and spend-ledgered per call, returning a
+  normalized GeoJSON `GeocodeResponse`.
+- **comm surface**: Functions `geo.nearby` / `geo.radius` / `geo.bbox` /
+  `geo.geohash_encode` / `geo.resolve` (consumers query geo by name,
+  never importing it; `geo.geohash_encode` is how listings stamp their
+  own `geohash` column).
+- **HTTP canon**: the host mounts `path("geo/", include("stapel_geo.urls"))`
+  → `/geo/api/v1/locations/...` + `/geo/api/v1/geocoding/...`
+  (api-versioning.md: the version segment is part of the contract; v1
+  patterns live in `urls_v1.py`, a future v2 mounts alongside).
+- **Contract triad**: committed `docs/{schema,flows,errors}.json`
+  (regenerate with `make contract`; Python 3.12 pin).
 
 ## Extension points (fork-free)
 
 ### Settings — `STAPEL_GEO` namespace (`conf.py`)
 
 Resolution per key: `settings.STAPEL_GEO[key]` → flat Django setting → env
-var → default. Read lazily at call time.
+var → default. Read lazily at call time. Full key table: README.md.
 
-| Key | Default | What it customizes | Semantics |
-|---|---|---|---|
-| `GEOCODER` | `stapel_geo.geocoding.providers.PhotonGeocoder` | Geocoder provider class (dotted path). | **REPLACE** (single strategy) |
-| `PHOTON_URL` | `http://localhost:2322` | Base URL of the Photon instance the default provider proxies. | value |
-| `PHOTON_LANGUAGES` | `["default","en","de","fr"]` | Languages the Photon bundle indexes; others fall back to `en`. | value |
-| `GEOCODER_TIMEOUT` | `10` | HTTP timeout (s) for geocoder calls. | value |
-| `GEOHASH_PRECISION` | `8` | Geohash precision stored on `Location.center`. | value |
-| `NEARBY_PRECISION` | `6` | Default geohash precision for coordinate nearby search. | value |
-| `NEARBY_LIMIT` / `NEARBY_MAX_LIMIT` | `10` / `50` | Default / max nearby result count. | value |
-| `SIMPLIFY_MAX_POINTS` | `100` | `fast_centroid` simplification budget. | value |
-| `GADM_FOLDER` | `/app/geofiles` | Folder `load_geofiles` scans. | value |
-| `IMPORT_ASYNC` | `True` | Run GADM imports in a background thread + emit `geo.import.completed`. | value |
+| Seam | Key | Semantics |
+|---|---|---|
+| Search backend | `SEARCH_BACKEND` (dotted path) | **REPLACE** (single strategy) |
+| Geocoder default | `GEOCODER` (a **name**) | picks from the registry |
+| Geocoder registry | `GEOCODERS` (`{name: dotted_path}`) | **MERGE** over `BUILTIN_GEOCODERS`; `None`/`""` removes |
+| Geocode cache | `GEOCODE_CACHE_POLICY` (dotted path) | **REPLACE** |
 
-### Geocoder provider seam — `GEOCODER` (ABC: `geocoding/base.py`)
+### Search backend seam — `SEARCH_BACKEND` (`search/base.py`)
 
-`STAPEL_GEO["GEOCODER"]` is a **REPLACE** dotted-path seam. Implement the
-`Geocoder` ABC to add Nominatim / Google / Mapbox / etc. without forking:
+Implement the `GeoSearchBackend` protocol (three verbs) and point the key
+at your class:
+
+```python
+from stapel_geo.search.base import GeoSearchBackend  # typing only
+
+class MyBackend:
+    def nearby(self, lat, lon, *, limit, precision=None): ...
+    def radius(self, lat, lon, radius_km, *, limit=None): ...
+    def bbox(self, min_lat, min_lon, max_lat, max_lon, *, limit=None): ...
+
+STAPEL_GEO = {"SEARCH_BACKEND": "myproject.geo.MyBackend"}
+```
+
+Contract: hits are `(key, distance_km)` pairs (bare keys for `bbox`)
+where **key = `str(Location.uuid)`** — the service layer joins keys back
+to rows, so a side-index backend (Redis, ES) only stores ids + points.
+`checks.W003/W004` warn on a broken value. Shipped backends:
+`search/postgres.py` (default), `search/redis.py` (side index;
+`rebuild()` re-indexes; receivers connected in `apps.py` sync it),
+`search/elasticsearch.py` + `search/solr.py` (stubs with pointers).
+
+### Geocoder provider seam — the registry (`geocoding/providers.py`)
+
+`BUILTIN_GEOCODERS = {photon, nominatim, google, yandex}`. Add or replace
+providers without forking:
 
 ```python
 from stapel_geo.geocoding.base import Geocoder
-from stapel_geo.geocoding.dto import GeocodeResponse
 
-class NominatimGeocoder(Geocoder):
-    name = "nominatim"
-    def search(self, query, *, lang=None, limit=None, **params) -> GeocodeResponse: ...
-    def reverse(self, lat, lng, *, lang=None, limit=None, **params) -> GeocodeResponse: ...
-    def structured(self, *, lang=None, limit=None, **params) -> GeocodeResponse: ...
+class MyGeocoder(Geocoder):
+    name = "mine"
+    def search(self, query, *, lang=None, limit=None, **params): ...
+    def reverse(self, lat, lng, *, lang=None, limit=None, **params): ...
+    def structured(self, *, lang=None, limit=None, **params): ...
 
-STAPEL_GEO = {"GEOCODER": "myproject.geo.NominatimGeocoder"}
+STAPEL_GEO = {"GEOCODERS": {"mine": "myproject.geo.MyGeocoder"},
+              "GEOCODER": "mine"}
+# or at runtime: stapel_geo.register_geocoder("mine", "myproject.geo.MyGeocoder")
 ```
 
 Contract: each verb returns a normalized `GeocodeResponse` (GeoJSON
 FeatureCollection) and raises `GeocoderError` when the upstream is
 unreachable (surfaced as HTTP 502 `error.502.geocoder_unavailable`).
-Read config lazily via `geo_settings`; never import GDAL. `checks.W001/W002`
-warn (not error — geocoding is degradable) if the path is broken.
+Read config lazily via `geo_settings`. `google`/`yandex` are **key-gated
+stubs** — hosts implement them with their own PAYG keys (stapel never
+bundles metered keys). The public-Nominatim provider self-enforces 1 rps;
+it is a dev/fallback, not a production default.
+
+### Geocode cache seam — `GEOCODE_CACHE_POLICY` (`geocoding/cache.py`)
+
+`GeocodeCachePolicy` ABC (`should_cache` / `lookup` / `store`). The
+default `LedgerCachePolicy` answers from the `GeocodeCache` ledger table
+within `GEOCODE_CACHE_TTL_DAYS`. The **ledger row is written on every
+call regardless** (ok / error / cache_hit + duration_ms) — caching is a
+read seam, accounting is not optional (the PromptLog pattern).
+
+### Throttle
+
+`geocoding/views.py:GeocodingThrottle` — a `ScopedRateThrottle`
+(scope `"geocoding"`) whose rate comes from
+`STAPEL_GEO["GEOCODER_THROTTLE"]`. Subclass + swap `throttle_classes` in
+a view subclass for per-verb rates.
 
 ### Serializer seams (`views.py`, `geocoding/views.py`)
 
 `seams.SerializerSeamMixin` — subclass a geocoder view, set
-`response_serializer_class`, remount the URL. The Location/GeoFile views are
-DRF `ModelViewSet`s: swap `serializer_class` / `get_serializer_class` in a
+`response_serializer_class`, remount the URL. `LocationViewSet` is a DRF
+`ModelViewSet`: swap `serializer_class` / `get_serializer_class` in a
 subclass and remount.
 
-| View | Response serializer |
-|---|---|
-| `GeocodeSearchView` / `GeocodeReverseView` / `GeocodeStructuredView` | `GeocodeResponseSerializer` |
-| `LocationViewSet` | `LocationSerializer` / `LocationCompactSerializer` (list, nearby) |
-| `GeoFileViewSet` | `GeoFileSerializer` |
+## Anti-patterns (do NOT)
 
-### GADM feature importer seam (`imports.GeoFileImporter`)
+- **Do not `import stapel_geo` from another module** — consume the comm
+  Functions by name (`geo.nearby`, `geo.geohash_encode`, ...). Listings'
+  `geohash` column is stamped via `geo.geohash_encode`, not via a Python
+  import.
+- **Do not bring back polygons/GDAL** — boundary geometry, GADM imports
+  and `ST_Contains` queries are out of scope since 0.3.0 (owner
+  directive). If a real demand appears, that is a separate opt-in add-on
+  package, not a change to this module.
+- **Do not bundle provider API keys** — google/yandex stay stubs here;
+  keys are host configuration.
+- **Do not bypass the facade** — new search verbs go through
+  `stapel_geo.search.get_backend()` (one code path per verb), never
+  straight to the ORM from views/functions.
+- **Do not add unversioned HTTP paths** — the canon is `/geo/api/v1/...`;
+  a breaking change mounts `v2` alongside, it never edits v1 in place.
 
-The status machine is GDAL-free and takes an injected
-`feature_importer(level, feature)` callable (the model wires in the
-GDAL-backed `models.import_feature`). Reuse `GeoFileImporter` with your own
-importer for a non-GADM source, or subclass `GeoFile` to change the pipeline.
+## Testing
 
-### comm surface
-
-| Kind | Name | Payload → Result | Schema |
-|---|---|---|---|
-| Function (provides) | `geo.nearby` | `{lat,lon[,precision]}` or `{geohash}` `[,limit]` → `{results:[{uuid,name,country,geohash,distance_km}]}` | `schemas/functions/geo.nearby.json` |
-| Function (provides) | `geo.resolve` | `{uuid}` → `{found,uuid[,name,country,type,display_name]}` | `schemas/functions/geo.resolve.json` |
-| Action (emits) | `geo.import.completed` | `{geofile_id,location_level,feature_count,status}` | `schemas/emits/geo.import.completed.json` |
-
-Emitted only on the async import path (`IMPORT_ASYNC=True`). Subscribers
-(search reindex, caches) must be idempotent — at-least-once delivery.
-
-## Hosts supply their own GADM data
-
-The wheel ships **no** bulk boundaries and no sample extract — only the
-flattening helper (`geofiles/flatten_hierarchy.py`). GADM data is
-non-commercial-licensed and large; download your own extracts from
-[gadm.org](https://gadm.org/) and point `STAPEL_GEO["GADM_FOLDER"]` (or
-`load_geofiles --folder`) at them. Each file's `name` must end in its depth
-level (`gadm41_XXX_2`).
-
-## GDPR
-
-No GDPR consumer is needed: locations are **reference data**, not user PII.
-`Location.uuid` is a cross-service reference for a place, not a person; the
-module stores no `AUTH_USER_MODEL` rows and subscribes to no `user.deleted`.
-
-## Admin categories (`@access`)
-
-Neither model carries an `@access` decorator — both stay on the implicit
-`@access.standard` (business) default.
-
-- **`Location`** is reference/domain data staff browse and correct (names,
-  hierarchy) — a textbook business table.
-- **`GeoFile`** *looks* ops-shaped (a `pending → processing →
-  completed/failed` status machine with progress counters, like a job
-  record), but staff are an intended creator of new rows, not just a viewer
-  of machine-written ones: `GeoFileAdmin` deliberately leaves `geo_json`
-  writable (only the status/progress/tracking fields are `readonly_fields`)
-  so uploading a new GADM extract through the admin's plain "Add" form is a
-  supported workflow, and `GeoFileViewSet` (a full DRF `ModelViewSet` behind
-  `ReadOnlyOrSuperUser`) lets a superuser create one over HTTP too, beside
-  the `load_geofiles` management command. `@access.ops` forbids add/change/
-  delete for *everyone including superuser* at the admin layer, which would
-  break that upload path — so `GeoFile` stays undecorated despite the
-  job-tracking shape.
-
-## Anti-patterns
-
-- **Don't fork to change the geocoder** — implement the `Geocoder` ABC and
-  set `GEOCODER`.
-- **Don't import GDAL in the GDAL-free layers** — keep `geohash`,
-  `geocoding`, `functions`, `services`, `imports` importable without a
-  spatial stack (a subprocess test enforces it). Import `Location`/`GeoFile`
-  only where you truly need geometry, and lazily.
-- **Don't import other stapel modules** — listings/calendar reach geo via
-  `geo.nearby` / `geo.resolve` (comm-by-name), never `import stapel_geo` in
-  another module.
-- **Don't bypass the settings namespace** with `os.getenv` at import time.
-- **Don't ship bulk GADM data** in the package.
-
-## App-layer override vs upstream contribution — rule of thumb
-
-**App-layer** (host project, no fork): a new geocoder provider via the
-`GEOCODER` seam, a settings value, a view subclass + URL remount, a
-`geo.import.completed` subscriber.
-
-**Upstream contribution**: new model fields/migrations, a new endpoint, a
-new settings key or seam, or a change to a committed schema.
-
-Litmus test: if you'd have to monkeypatch or edit code inside
-`stapel_geo/` — it's upstream. If a setting, subclass, receiver or comm
-call gets you there — it's app-layer.
+`pytest tests/` — self-contained (`conftest.py` configures in-memory
+SQLite; no GDAL, no external services; the Redis backend is tested
+against an in-memory fake, and a live-Redis failure path asserts saves
+never break). comm schemas are enforced (`VALIDATE_SCHEMAS=True`).
+`make contract-check` guards the committed contract triad;
+`make migration-lint` gates migrations.

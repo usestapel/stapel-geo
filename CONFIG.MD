@@ -14,14 +14,19 @@ below.
 
 | Key | Source | Purpose | Required | Default |
 |-----|--------|---------|----------|---------|
-| GEOCODER | env | dotted path to a Geocoder subclass — the geocoder-provider seam (REPLACE). | no | stapel_geo.geocoding.providers.PhotonGeocoder |
+| SEARCH_BACKEND | env | dotted path to the GeoSearchBackend implementation behind nearby/radius/bbox (REPLACE seam). | no | stapel_geo.search.postgres.PostgresGeoSearchBackend |
+| REDIS_URL | env | Redis connection URL for the Redis search backend (only read when that backend is configured). | no | redis://localhost:6379/0 |
+| REDIS_GEO_KEY | env | sorted-set key of the Redis geo side index. | no | stapel:geo:locations |
+| GEOHASH_PRECISION | env | geohash precision stored on Location (characters, 1-12). | no | 8 |
+| NEARBY_PRECISION | env | default geohash precision for a nearby search on raw coordinates. | no | 6 |
+| NEARBY_LIMIT | env | default result count for nearby/radius/bbox queries. | no | 10 |
+| NEARBY_MAX_LIMIT | env | maximum result count for nearby/radius/bbox queries. | no | 50 |
+| GEOCODER | env | **name** of the default geocoder provider (a registered_geocoders() key; was a dotted path before 0.3.0). | no | photon |
+| GEOCODERS | env | merge-registry of extra providers `{name: dotted_path}` over BUILTIN_GEOCODERS; None/"" removes a name. | no | {} |
 | PHOTON_URL | env | base URL of the Photon instance the default provider proxies. | no | http://localhost:2322 |
 | PHOTON_LANGUAGES | env | language codes the configured Photon bundle indexes (others fall back to English). | no | [default, en, de, fr] |
+| NOMINATIM_URL | env | base URL for the "nominatim" provider (public instance: 1 rps, dev/fallback only). | no | https://nominatim.openstreetmap.org |
 | GEOCODER_TIMEOUT | env | HTTP timeout (seconds) for outbound geocoder requests. | no | 10 |
-| GEOHASH_PRECISION | env | geohash precision stored on Location.center (characters, 1-12). | no | 8 |
-| NEARBY_PRECISION | env | default geohash precision for a nearby search on raw coordinates. | no | 6 |
-| NEARBY_LIMIT | env | default result count for nearby queries. | no | 10 |
-| NEARBY_MAX_LIMIT | env | maximum result count for nearby queries. | no | 50 |
-| SIMPLIFY_MAX_POINTS | env | polygons above this point count are simplified before centroid computation. | no | 100 |
-| GADM_FOLDER | env | folder the `load_geofiles` command scans for GADM extracts (data not shipped). | no | /app/geofiles |
-| IMPORT_ASYNC | env | when True, GeoFile imports run in a background thread and emit `geo.import.completed`. | no | true |
+| GEOCODER_THROTTLE | env | DRF scoped throttle rate (scope "geocoding") for the geocoder proxy views. | no | 30/min |
+| GEOCODE_CACHE_POLICY | env | dotted path to the GeocodeCachePolicy subclass (REPLACE seam). | no | stapel_geo.geocoding.cache.LedgerCachePolicy |
+| GEOCODE_CACHE_TTL_DAYS | env | TTL (days) for the default ledger-backed geocode cache. | no | 30 |
