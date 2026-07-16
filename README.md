@@ -111,6 +111,7 @@ engine — see `MODULE.md`.
 - [CHANGELOG.md](CHANGELOG.md) — including what 0.3.0 removed and why.
 - `docs/{schema,flows,errors}.json` — the committed contract triad
   (regenerate with `make contract`).
+- Error reference: [English](docs/errors.en.md) · [Русский](docs/errors.ru.md).
 
 ## License
 

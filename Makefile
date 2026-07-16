@@ -9,9 +9,12 @@ PYTHON ?= python3
 
 .PHONY: contract contract-check
 
-# Emit the contract triad into docs/.
+# Emit the contract triad + the human-readable error reference into docs/.
 contract:
 	$(PYTHON) -m stapel_geo._codegen --out docs
+	$(PYTHON) -c "from stapel_geo._codegen import _configure; _configure(); \
+	from django.core.management import call_command; \
+	call_command('generate_error_docs', '--out', 'docs')"
 
 # Drift gate: regenerate into a temp dir and diff against the committed docs/*.json.
 contract-check:
