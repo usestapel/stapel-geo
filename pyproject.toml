@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "stapel-geo"
-version = "0.3.0"
+version = "0.3.1"
 description = "Geohash proximity search and geocoding for the Stapel framework — no GDAL, no PostGIS"
 readme = "README.md"
 license = { text = "MIT" }
@@ -23,7 +23,7 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
-    "stapel-core>=0.10,<0.11",
+    "stapel-core>=0.10,<0.12",
     "django-treenode>=0.20",
     "pygeohash>=2",
     "requests>=2.28",
