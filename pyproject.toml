@@ -4,12 +4,12 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "stapel-geo"
-version = "0.2.2"
-description = "Geographic locations and geocoding for the Stapel framework"
+version = "0.3.0"
+description = "Geohash proximity search and geocoding for the Stapel framework — no GDAL, no PostGIS"
 readme = "README.md"
 license = { text = "MIT" }
 requires-python = ">=3.11"
-keywords = ["django", "stapel", "geo", "geohash", "geocoding", "postgis"]
+keywords = ["django", "stapel", "geo", "geohash", "geocoding", "nearby", "redis"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Framework :: Django",
@@ -36,12 +36,11 @@ Documentation = "https://github.com/usestapel/stapel-geo#readme"
 Changelog = "https://github.com/usestapel/stapel-geo/blob/main/CHANGELOG.md"
 Issues = "https://github.com/usestapel/stapel-geo/issues"
 
+# The Redis search backend uses the `redis` package; it is not a hard
+# dependency (the default Postgres backend needs nothing extra).
 [project.optional-dependencies]
-# Spatial extra: the location tree, GADM import and admin need the GDAL C
-# library + a spatial DB (PostGIS in production, SpatiaLite for tests). The
-# geohash math, geocoder proxy, comm surface and conf work WITHOUT this.
-spatial = ["GDAL>=3.0"]
-all = ["stapel-geo[spatial]"]
+redis = ["redis>=4.2"]
+all = ["stapel-geo[redis]"]
 
 [tool.setuptools]
 package-dir = {"stapel_geo" = "."}
@@ -49,8 +48,7 @@ packages = [
     "stapel_geo",
     "stapel_geo.migrations",
     "stapel_geo.geocoding",
-    "stapel_geo.management",
-    "stapel_geo.management.commands",
+    "stapel_geo.search",
 ]
 
 [tool.setuptools.package-data]
@@ -58,8 +56,6 @@ stapel_geo = [
     "py.typed",
     "migrations/*.py",
     "schemas/**/*.json",
-    "geofiles/*.py",
-    "geofiles/*.md",
 ]
 
 [tool.ruff]

@@ -20,14 +20,7 @@ jobs:
           python-version: ${{ matrix.python-version }}
           cache: pip
 
-      # GeoDjango needs the GDAL/GEOS C libraries and a spatial DB; without
-      # them the spatial model/HTTP tests skip-with-reason and coverage of
-      # the spatial layer drops below the codecov patch floor. Install them
-      # so the spatial suite runs against in-memory SpatiaLite.
-      - name: Install system geo libraries (GDAL/GEOS/SpatiaLite)
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y gdal-bin libgdal-dev libgeos-dev libsqlite3-mod-spatialite
+      # 0.3.0: no GDAL, no spatial DB — the whole suite runs on SQLite.
 
       - name: Install stapel-core
         run: pip install git+https://github.com/usestapel/stapel-core.git
@@ -97,7 +90,7 @@ jobs:
           cache: pip
       - name: Install as an end user (deps resolved from PyPI by pin)
         run: pip install .
-      - name: Verify stapel-core resolved from PyPI inside the 0.8 window
-        run: cd "$RUNNER_TEMP" && python -c "import importlib.metadata as m; v=m.version('stapel-core'); print('stapel-core', v); assert tuple(map(int, v.split('.')[:2]))==(0,8), v"
+      - name: Verify stapel-core resolved from PyPI inside the 0.10 window
+        run: cd "$RUNNER_TEMP" && python -c "import importlib.metadata as m; v=m.version('stapel-core'); print('stapel-core', v); assert tuple(map(int, v.split('.')[:2]))==(0,10), v"
       - name: Import smoke (installed package, from a clean dir)
         run: cd "$RUNNER_TEMP" && python -c "import stapel_geo; print('release-track import OK')"
