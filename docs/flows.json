@@ -1,0 +1,235 @@
+[
+  {
+    "id": "geo.geocode_address",
+    "title": "Geocode an address",
+    "title_key": "flow.geo.geocode_address.title",
+    "description": "A logged-in user turns free text, address components or a coordinate into normalized GeoJSON places through the swappable provider registry (photon by default; nominatim as keyless dev/fallback). Every call is throttled (scope 'geocoding'), cached (GeocodeCache, 30-day TTL) and written to the spend ledger.",
+    "description_key": "flow.geo.geocode_address.description",
+    "actors": [
+      "Authenticated user"
+    ],
+    "steps": [
+      {
+        "kind": "human",
+        "order": 0,
+        "note": "The user types an address or drops a map pin",
+        "note_key": "flow.geo.geocode_address.step.0.note",
+        "ref": ""
+      },
+      {
+        "kind": "http",
+        "order": 1,
+        "note": "Free-text forward geocoding (throttled, cached, ledgered)",
+        "note_key": "flow.geo.geocode_address.step.1.note",
+        "ref": "stapel_geo.geocoding.views.GeocodeSearchView.get",
+        "endpoints": [
+          {
+            "method": "GET",
+            "path": "/geo/api/v1/geocoding/search"
+          }
+        ]
+      },
+      {
+        "kind": "http",
+        "order": 2,
+        "note": "Search by address components (city, street, postcode, ...)",
+        "note_key": "flow.geo.geocode_address.step.2.note",
+        "ref": "stapel_geo.geocoding.views.GeocodeStructuredView.get",
+        "endpoints": [
+          {
+            "method": "GET",
+            "path": "/geo/api/v1/geocoding/structured"
+          }
+        ]
+      },
+      {
+        "kind": "http",
+        "order": 3,
+        "note": "Map pin to address (reverse geocoding)",
+        "note_key": "flow.geo.geocode_address.step.3.note",
+        "ref": "stapel_geo.geocoding.views.GeocodeReverseView.get",
+        "endpoints": [
+          {
+            "method": "GET",
+            "path": "/geo/api/v1/geocoding/reverse"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "geo.location_browse",
+    "title": "Browse the location tree",
+    "title_key": "flow.geo.location_browse.title",
+    "description": "A user drills into the hierarchical location reference (country -> region -> city) or searches it by name — picking a location for a listing, a profile, or a filter. Flat reference data: no geometry, each node is a point with a geohash.",
+    "description_key": "flow.geo.location_browse.description",
+    "actors": [
+      "Any authenticated or anonymous user"
+    ],
+    "steps": [
+      {
+        "kind": "human",
+        "order": 0,
+        "note": "The user opens a location picker or map filter",
+        "note_key": "flow.geo.location_browse.step.0.note",
+        "ref": ""
+      },
+      {
+        "kind": "http",
+        "order": 1,
+        "note": "List root locations or search the tree by name",
+        "note_key": "flow.geo.location_browse.step.1.note",
+        "ref": "stapel_geo.views.LocationViewSet.list",
+        "endpoints": [
+          {
+            "method": "GET",
+            "path": "/geo/api/v1/^locations/?$"
+          },
+          {
+            "method": "GET",
+            "path": "/geo/api/v1/^locations/?\\.(?P<format>[a-z0-9]+)/?$"
+          }
+        ]
+      },
+      {
+        "kind": "http",
+        "order": 2,
+        "note": "Fetch the root level (countries)",
+        "note_key": "flow.geo.location_browse.step.2.note",
+        "ref": "stapel_geo.views.LocationViewSet.countries",
+        "endpoints": [
+          {
+            "method": "GET",
+            "path": "/geo/api/v1/^locations/countries/?$"
+          },
+          {
+            "method": "GET",
+            "path": "/geo/api/v1/^locations/countries/?\\.(?P<format>[a-z0-9]+)/?$"
+          }
+        ]
+      },
+      {
+        "kind": "http",
+        "order": 3,
+        "note": "Drill into a node's children",
+        "note_key": "flow.geo.location_browse.step.3.note",
+        "ref": "stapel_geo.views.LocationViewSet.by_parent",
+        "endpoints": [
+          {
+            "method": "GET",
+            "path": "/geo/api/v1/^locations/by-parent/(?P<parent_id>\\d+)/?$"
+          },
+          {
+            "method": "GET",
+            "path": "/geo/api/v1/^locations/by-parent/(?P<parent_id>\\d+)/?\\.(?P<format>[a-z0-9]+)/?$"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "geo.location_nearby",
+    "title": "Find locations near a point",
+    "title_key": "flow.geo.location_nearby.title",
+    "description": "A consumer (listings' radius filter, a 'near me' UI) asks which known locations are nearest to a coordinate or geohash. Served by the swappable search backend (STAPEL_GEO['SEARCH_BACKEND']) — geohash prefix expansion over the primary DB by default, correct across the equator, the antimeridian and the poles.",
+    "description_key": "flow.geo.location_nearby.description",
+    "actors": [
+      "Any user",
+      "Consumer modules via comm"
+    ],
+    "steps": [
+      {
+        "kind": "http",
+        "order": 1,
+        "note": "Nearest locations to a coordinate (top-K, exact haversine)",
+        "note_key": "flow.geo.location_nearby.step.1.note",
+        "ref": "stapel_geo.views.LocationViewSet.nearby_by_coords",
+        "endpoints": [
+          {
+            "method": "GET",
+            "path": "/geo/api/v1/^locations/nearby-by-coords/?$"
+          },
+          {
+            "method": "GET",
+            "path": "/geo/api/v1/^locations/nearby-by-coords/?\\.(?P<format>[a-z0-9]+)/?$"
+          }
+        ]
+      },
+      {
+        "kind": "http",
+        "order": 2,
+        "note": "Nearest locations to a geohash (decoded to its cell centre)",
+        "note_key": "flow.geo.location_nearby.step.2.note",
+        "ref": "stapel_geo.views.LocationViewSet.nearby_by_geohash",
+        "endpoints": [
+          {
+            "method": "GET",
+            "path": "/geo/api/v1/^locations/nearby-by-geohash/?$"
+          },
+          {
+            "method": "GET",
+            "path": "/geo/api/v1/^locations/nearby-by-geohash/?\\.(?P<format>[a-z0-9]+)/?$"
+          }
+        ]
+      },
+      {
+        "kind": "function",
+        "order": 3,
+        "note": "Modules query top-K proximity by name over comm — never importing geo",
+        "note_key": "flow.geo.location_nearby.step.3.note",
+        "ref": "geo.nearby"
+      },
+      {
+        "kind": "function",
+        "order": 4,
+        "note": "Radius membership (everything within N km) for radius filters",
+        "note_key": "flow.geo.location_nearby.step.4.note",
+        "ref": "geo.radius"
+      },
+      {
+        "kind": "function",
+        "order": 5,
+        "note": "Rectangle membership for map-viewport queries (antimeridian-aware)",
+        "note_key": "flow.geo.location_nearby.step.5.note",
+        "ref": "geo.bbox"
+      }
+    ]
+  },
+  {
+    "id": "geo.location_resolve",
+    "title": "Validate and expand a location reference",
+    "title_key": "flow.geo.location_resolve.title",
+    "description": "A module holding an opaque location UUID (a listing's location_id, a calendar address) checks it still exists and expands it to a display summary. A missing UUID is a normal answer, not an error.",
+    "description_key": "flow.geo.location_resolve.description",
+    "actors": [
+      "Consumer modules via comm",
+      "Frontends"
+    ],
+    "steps": [
+      {
+        "kind": "http",
+        "order": 1,
+        "note": "Check a location UUID exists (malformed = valid: false)",
+        "note_key": "flow.geo.location_resolve.step.1.note",
+        "ref": "stapel_geo.views.LocationViewSet.validate_uuid",
+        "endpoints": [
+          {
+            "method": "GET",
+            "path": "/geo/api/v1/^locations/validate-uuid/(?P<uuid>[^/.]+)/?$"
+          },
+          {
+            "method": "GET",
+            "path": "/geo/api/v1/^locations/validate-uuid/(?P<uuid>[^/.]+)/?\\.(?P<format>[a-z0-9]+)/?$"
+          }
+        ]
+      },
+      {
+        "kind": "function",
+        "order": 2,
+        "note": "Modules resolve location UUIDs by name over comm",
+        "note_key": "flow.geo.location_resolve.step.2.note",
+        "ref": "geo.resolve"
+      }
+    ]
+  }
+]

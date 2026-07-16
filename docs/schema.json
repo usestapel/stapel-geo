@@ -1,0 +1,1098 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "",
+    "version": "0.0.0"
+  },
+  "paths": {
+    "/geo/api/v1/geocoding/reverse": {
+      "get": {
+        "operationId": "geo_api_v1_geocoding_reverse_retrieve",
+        "description": "Reverse geocoding — coordinates to address.\n\n**Permissions:** `IsNotAnonymousUser`",
+        "summary": "Reverse geocode coordinates",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "lang",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "lat",
+            "schema": {
+              "type": "number",
+              "format": "float"
+            },
+            "required": true
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "lon",
+            "schema": {
+              "type": "number",
+              "format": "float"
+            },
+            "required": true
+          }
+        ],
+        "tags": [
+          "Geocoding"
+        ],
+        "security": [
+          {
+            "JWTCookieAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GeocodeResponse"
+                },
+                "examples": {
+                  "GeocodeResponse": {
+                    "value": {
+                      "type": "FeatureCollection"
+                    }
+                  }
+                }
+              }
+            },
+            "description": ""
+          }
+        }
+      }
+    },
+    "/geo/api/v1/geocoding/search": {
+      "get": {
+        "operationId": "geo_api_v1_geocoding_search_retrieve",
+        "description": "Forward geocoding — search places by free-text query.\n\n**Permissions:** `IsNotAnonymousUser`",
+        "summary": "Search places by text",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "lang",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Search query",
+            "required": true
+          }
+        ],
+        "tags": [
+          "Geocoding"
+        ],
+        "security": [
+          {
+            "JWTCookieAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GeocodeResponse"
+                },
+                "examples": {
+                  "GeocodeResponse": {
+                    "value": {
+                      "type": "FeatureCollection"
+                    }
+                  }
+                }
+              }
+            },
+            "description": ""
+          }
+        }
+      }
+    },
+    "/geo/api/v1/geocoding/structured": {
+      "get": {
+        "operationId": "geo_api_v1_geocoding_structured_retrieve",
+        "description": "Structured address search — search by address components.\n\n**Permissions:** `IsNotAnonymousUser`",
+        "summary": "Structured address search",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "city",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "countrycode",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "lang",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "postcode",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "street",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "tags": [
+          "Geocoding"
+        ],
+        "security": [
+          {
+            "JWTCookieAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GeocodeResponse"
+                },
+                "examples": {
+                  "GeocodeResponse": {
+                    "value": {
+                      "type": "FeatureCollection"
+                    }
+                  }
+                }
+              }
+            },
+            "description": ""
+          }
+        }
+      }
+    },
+    "/geo/api/v1/locations/": {
+      "get": {
+        "operationId": "geo_api_v1_locations_list",
+        "summary": "List and search locations",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer"
+            },
+            "description": "Max results (default 10, max 50)."
+          },
+          {
+            "in": "query",
+            "name": "search",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Search query (min 2 chars) on location name."
+          }
+        ],
+        "tags": [
+          "Locations"
+        ],
+        "security": [
+          {
+            "JWTCookieAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/LocationCompact"
+                  }
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "description": "**Permissions:** `ReadOnlyOrSuperUser`"
+      },
+      "post": {
+        "operationId": "geo_api_v1_locations_create",
+        "tags": [
+          "Locations"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Location"
+              }
+            },
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "$ref": "#/components/schemas/Location"
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Location"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "JWTCookieAuth": []
+          }
+        ],
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Location"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "description": "**Permissions:** `ReadOnlyOrSuperUser`"
+      }
+    },
+    "/geo/api/v1/locations/{id}/": {
+      "get": {
+        "operationId": "geo_api_v1_locations_retrieve",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "schema": {
+              "type": "integer"
+            },
+            "description": "A unique integer value identifying this location.",
+            "required": true
+          }
+        ],
+        "tags": [
+          "Locations"
+        ],
+        "security": [
+          {
+            "JWTCookieAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Location"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "description": "**Permissions:** `ReadOnlyOrSuperUser`"
+      },
+      "put": {
+        "operationId": "geo_api_v1_locations_update",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "schema": {
+              "type": "integer"
+            },
+            "description": "A unique integer value identifying this location.",
+            "required": true
+          }
+        ],
+        "tags": [
+          "Locations"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Location"
+              }
+            },
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "$ref": "#/components/schemas/Location"
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Location"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "JWTCookieAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Location"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "description": "**Permissions:** `ReadOnlyOrSuperUser`"
+      },
+      "patch": {
+        "operationId": "geo_api_v1_locations_partial_update",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "schema": {
+              "type": "integer"
+            },
+            "description": "A unique integer value identifying this location.",
+            "required": true
+          }
+        ],
+        "tags": [
+          "Locations"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PatchedLocation"
+              }
+            },
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "$ref": "#/components/schemas/PatchedLocation"
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/PatchedLocation"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "JWTCookieAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Location"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "description": "**Permissions:** `ReadOnlyOrSuperUser`"
+      },
+      "delete": {
+        "operationId": "geo_api_v1_locations_destroy",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "schema": {
+              "type": "integer"
+            },
+            "description": "A unique integer value identifying this location.",
+            "required": true
+          }
+        ],
+        "tags": [
+          "Locations"
+        ],
+        "security": [
+          {
+            "JWTCookieAuth": []
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No response body"
+          }
+        },
+        "description": "**Permissions:** `ReadOnlyOrSuperUser`"
+      }
+    },
+    "/geo/api/v1/locations/by-parent/{parent_id}/": {
+      "get": {
+        "operationId": "geo_api_v1_locations_by_parent_list",
+        "summary": "Children of a location",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "parent_id",
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d+$"
+            },
+            "required": true
+          }
+        ],
+        "tags": [
+          "Locations"
+        ],
+        "security": [
+          {
+            "JWTCookieAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/LocationCompact"
+                  }
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "description": "**Permissions:** `ReadOnlyOrSuperUser`"
+      }
+    },
+    "/geo/api/v1/locations/countries/": {
+      "get": {
+        "operationId": "geo_api_v1_locations_countries_list",
+        "summary": "Countries (root locations)",
+        "tags": [
+          "Locations"
+        ],
+        "security": [
+          {
+            "JWTCookieAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/LocationCompact"
+                  }
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "description": "**Permissions:** `ReadOnlyOrSuperUser`"
+      }
+    },
+    "/geo/api/v1/locations/nearby-by-coords/": {
+      "get": {
+        "operationId": "geo_api_v1_locations_nearby_by_coords_list",
+        "summary": "Find nearby locations by coordinates",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "lat",
+            "schema": {
+              "type": "number",
+              "format": "float"
+            },
+            "required": true
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "lon",
+            "schema": {
+              "type": "number",
+              "format": "float"
+            },
+            "required": true
+          },
+          {
+            "in": "query",
+            "name": "precision",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "tags": [
+          "Locations"
+        ],
+        "security": [
+          {
+            "JWTCookieAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/LocationCompact"
+                  }
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "description": "**Permissions:** `ReadOnlyOrSuperUser`"
+      }
+    },
+    "/geo/api/v1/locations/nearby-by-geohash/": {
+      "get": {
+        "operationId": "geo_api_v1_locations_nearby_by_geohash_list",
+        "summary": "Find nearby locations by geohash",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "geohash",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "tags": [
+          "Locations"
+        ],
+        "security": [
+          {
+            "JWTCookieAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/LocationCompact"
+                  }
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "description": "**Permissions:** `ReadOnlyOrSuperUser`"
+      }
+    },
+    "/geo/api/v1/locations/validate-uuid/{uuid}/": {
+      "get": {
+        "operationId": "geo_api_v1_locations_validate_uuid_retrieve",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "uuid",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true
+          }
+        ],
+        "tags": [
+          "Locations"
+        ],
+        "security": [
+          {
+            "JWTCookieAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidateUuidResponse"
+                },
+                "examples": {
+                  "ValidateUuidResponse": {
+                    "value": {
+                      "valid": true,
+                      "uuid": "550e8400-e29b-41d4-a716-446655440000"
+                    }
+                  }
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "description": "**Permissions:** `ReadOnlyOrSuperUser`"
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "GeocodeFeature": {
+        "type": "object",
+        "description": "A single geocoded result feature.",
+        "properties": {
+          "type": {
+            "type": "string",
+            "description": "GeoJSON type",
+            "example": "Feature"
+          },
+          "geometry": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/GeocodeGeometry"
+              }
+            ],
+            "description": "Point geometry with coordinates"
+          },
+          "properties": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/GeocodeProperties"
+              }
+            ],
+            "description": "Place properties (name, address components, OSM data)"
+          }
+        },
+        "required": [
+          "geometry",
+          "properties",
+          "type"
+        ]
+      },
+      "GeocodeGeometry": {
+        "type": "object",
+        "description": "GeoJSON point geometry.",
+        "properties": {
+          "type": {
+            "type": "string",
+            "description": "Geometry type",
+            "example": "Point"
+          },
+          "coordinates": {
+            "type": "array",
+            "items": {
+              "type": "number",
+              "format": "double"
+            },
+            "description": "[longitude, latitude]",
+            "example": [
+              13.38333,
+              52.51667
+            ]
+          }
+        },
+        "required": [
+          "coordinates",
+          "type"
+        ]
+      },
+      "GeocodeProperties": {
+        "type": "object",
+        "description": "Properties of a geocoded feature.",
+        "properties": {
+          "name": {
+            "type": "string",
+            "nullable": true,
+            "description": "Place name",
+            "example": "Berlin"
+          },
+          "country": {
+            "type": "string",
+            "nullable": true,
+            "description": "Country name",
+            "example": "Germany"
+          },
+          "countrycode": {
+            "type": "string",
+            "nullable": true,
+            "description": "ISO 3166-1 alpha-2 code",
+            "example": "DE"
+          },
+          "osm_key": {
+            "type": "string",
+            "nullable": true,
+            "description": "OSM tag key",
+            "example": "place"
+          },
+          "osm_value": {
+            "type": "string",
+            "nullable": true,
+            "description": "OSM tag value",
+            "example": "city"
+          },
+          "osm_type": {
+            "type": "string",
+            "nullable": true,
+            "description": "OSM element type (N/W/R)",
+            "example": "R"
+          },
+          "osm_id": {
+            "type": "integer",
+            "nullable": true,
+            "description": "OSM element ID",
+            "example": 240109189
+          },
+          "state": {
+            "type": "string",
+            "nullable": true,
+            "description": "State or region",
+            "example": "Brandenburg"
+          },
+          "county": {
+            "type": "string",
+            "nullable": true,
+            "description": "County name",
+            "example": "Kreisfreie Stadt Berlin"
+          },
+          "city": {
+            "type": "string",
+            "nullable": true,
+            "description": "City name",
+            "example": "Berlin"
+          },
+          "district": {
+            "type": "string",
+            "nullable": true,
+            "description": "District or suburb",
+            "example": "Mitte"
+          },
+          "street": {
+            "type": "string",
+            "nullable": true,
+            "description": "Street name",
+            "example": "Unter den Linden"
+          },
+          "housenumber": {
+            "type": "string",
+            "nullable": true,
+            "description": "House number",
+            "example": 1
+          },
+          "postcode": {
+            "type": "string",
+            "nullable": true,
+            "description": "Postal code",
+            "example": 10117
+          },
+          "extent": {
+            "type": "array",
+            "items": {
+              "type": "number",
+              "format": "double"
+            },
+            "nullable": true,
+            "description": "Bounding box [minLon, minLat, maxLon, maxLat]",
+            "example": [
+              13.08,
+              52.33,
+              13.76,
+              52.68
+            ]
+          }
+        }
+      },
+      "GeocodeResponse": {
+        "type": "object",
+        "description": "GeoJSON FeatureCollection with geocoding results.",
+        "properties": {
+          "type": {
+            "type": "string",
+            "description": "GeoJSON type",
+            "example": "FeatureCollection"
+          },
+          "features": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GeocodeFeature"
+            },
+            "description": "List of geocoded features"
+          }
+        }
+      },
+      "Location": {
+        "type": "object",
+        "description": "Full Location representation — a flat point plus tree metadata.",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "readOnly": true
+          },
+          "uuid": {
+            "type": "string",
+            "format": "uuid",
+            "readOnly": true
+          },
+          "name": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 100
+          },
+          "type": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 100
+          },
+          "country": {
+            "type": "string",
+            "maxLength": 255
+          },
+          "lat": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "lon": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "geohash": {
+            "type": "string",
+            "readOnly": true,
+            "nullable": true
+          },
+          "tn_parent": {
+            "type": "integer",
+            "nullable": true,
+            "title": "Parent"
+          },
+          "display_name_narrow": {
+            "type": "string",
+            "readOnly": true
+          },
+          "display_name_broad": {
+            "type": "string",
+            "readOnly": true
+          }
+        },
+        "required": [
+          "display_name_broad",
+          "display_name_narrow",
+          "geohash",
+          "id",
+          "uuid"
+        ]
+      },
+      "LocationCompact": {
+        "type": "object",
+        "description": "Lightweight Location representation; nearby adds distance_km.",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "readOnly": true
+          },
+          "uuid": {
+            "type": "string",
+            "format": "uuid",
+            "readOnly": true
+          },
+          "name": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 100
+          },
+          "type": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 100
+          },
+          "country": {
+            "type": "string",
+            "maxLength": 255
+          },
+          "geohash": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 12
+          },
+          "tn_parent": {
+            "type": "integer",
+            "nullable": true,
+            "title": "Parent"
+          },
+          "display_name_narrow": {
+            "type": "string",
+            "maxLength": 255
+          },
+          "display_name_broad": {
+            "type": "string",
+            "maxLength": 255
+          },
+          "distance_km": {
+            "type": "number",
+            "format": "double",
+            "readOnly": true,
+            "nullable": true
+          }
+        },
+        "required": [
+          "distance_km",
+          "id",
+          "uuid"
+        ]
+      },
+      "PatchedLocation": {
+        "type": "object",
+        "description": "Full Location representation — a flat point plus tree metadata.",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "readOnly": true
+          },
+          "uuid": {
+            "type": "string",
+            "format": "uuid",
+            "readOnly": true
+          },
+          "name": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 100
+          },
+          "type": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 100
+          },
+          "country": {
+            "type": "string",
+            "maxLength": 255
+          },
+          "lat": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "lon": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "geohash": {
+            "type": "string",
+            "readOnly": true,
+            "nullable": true
+          },
+          "tn_parent": {
+            "type": "integer",
+            "nullable": true,
+            "title": "Parent"
+          },
+          "display_name_narrow": {
+            "type": "string",
+            "readOnly": true
+          },
+          "display_name_broad": {
+            "type": "string",
+            "readOnly": true
+          }
+        }
+      },
+      "ValidateUuidResponse": {
+        "type": "object",
+        "description": "UUID validation result for cross-service reference checks.",
+        "properties": {
+          "valid": {
+            "type": "boolean",
+            "description": "Whether the UUID exists",
+            "example": true
+          },
+          "uuid": {
+            "type": "string",
+            "description": "The validated UUID string",
+            "example": "550e8400-e29b-41d4-a716-446655440000"
+          }
+        },
+        "required": [
+          "uuid",
+          "valid"
+        ]
+      }
+    },
+    "securitySchemes": {
+      "JWTCookieAuth": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "stapel_jwt",
+        "description": "JWT token stored in cookie. Login via /auth/admin/ to get the cookie."
+      }
+    }
+  }
+}
