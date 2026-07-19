@@ -1,0 +1,65 @@
+{
+  "module": "stapel-geo",
+  "version": "0.3.2",
+  "provides": "Geohash proximity search and geocoding, no GDAL/PostGIS/spatial database: a hierarchical location tree (flat lat/lon points with an auto-encoded geohash and a stable cross-service UUID), a proximity search facade (nearby/radius/bbox) behind one swappable backend, and a geocoder proxy (forward/structured/reverse) behind a provider merge-registry, throttled, cached and spend-ledgered per call.",
+  "axes": [
+    {
+      "key": "SEARCH_BACKEND",
+      "kind": "enum",
+      "default": "stapel_geo.search.postgres.PostgresGeoSearchBackend",
+      "group": "geo.search",
+      "gates": {
+        "operations": [],
+        "co_gates": []
+      },
+      "curated": {
+        "summary": "Which proximity-search backend serves nearby/radius/bbox. Default runs geohash prefix expansion over the primary database (no extra infra); a Redis GEOSEARCH side-index backend ships for the hot set; Elasticsearch/Solr are named stubs (README.md 'Proximity search facade', conf.py).",
+        "business_label": "Proximity search backend"
+      }
+    },
+    {
+      "key": "GEOCODER",
+      "kind": "enum",
+      "default": "photon",
+      "group": "geo.geocoding",
+      "gates": {
+        "operations": [],
+        "co_gates": []
+      },
+      "curated": {
+        "summary": "Default geocoding provider name, resolved through the GEOCODERS merge-registry (built-in photon/nominatim, or a registered name). google/yandex are key-gated stubs a host implements with its own PAYG keys (conf.py, MODULE.md 'Geocoder provider seam').",
+        "business_label": "Default geocoding provider"
+      }
+    }
+  ],
+  "extension_points": [
+    {
+      "name": "SEARCH_BACKEND",
+      "kind": "dotted_path",
+      "summary": "REPLACE seam: implement the GeoSearchBackend protocol (nearby/radius/bbox) and point the setting at your class (search/base.py, MODULE.md 'Search backend seam')."
+    },
+    {
+      "name": "GEOCODERS",
+      "kind": "merge_registry",
+      "summary": "MERGE registry ({name: dotted_path}) over BUILTIN_GEOCODERS (photon/nominatim/google/yandex); None/'' removes a builtin name. Also extendable at runtime via register_geocoder() (geocoding/providers.py, MODULE.md 'Geocoder provider seam')."
+    },
+    {
+      "name": "GEOCODE_CACHE_POLICY",
+      "kind": "dotted_path",
+      "summary": "REPLACE seam: GeocodeCachePolicy ABC (should_cache/lookup/store); default LedgerCachePolicy answers from the GeocodeCache ledger table within GEOCODE_CACHE_TTL_DAYS (geocoding/cache.py, MODULE.md 'Geocode cache seam')."
+    },
+    {
+      "name": "serializer_seams",
+      "kind": "class_override",
+      "summary": "SerializerSeamMixin on geocoder views (response_serializer_class) and LocationViewSet (a plain DRF ModelViewSet, serializer_class/get_serializer_class) — subclass and remount to swap (views.py, geocoding/views.py, MODULE.md 'Serializer seams')."
+    }
+  ],
+  "operations_total": 14,
+  "requires": [
+    {
+      "module": "stapel-core",
+      "optional": false,
+      "reason": "comm bus (Functions geo.nearby/geo.radius/geo.bbox/geo.geohash_encode/geo.resolve), AppSettings config layer, flows, error registry (pyproject.toml dependency; conf.py:25, functions.py:25, flows.py:12, errors.py:6)"
+    }
+  ]
+}
