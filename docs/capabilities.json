@@ -1,6 +1,6 @@
 {
   "module": "stapel-geo",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "provides": "Geohash proximity search and geocoding, no GDAL/PostGIS/spatial database: a hierarchical location tree (flat lat/lon points with an auto-encoded geohash and a stable cross-service UUID), a proximity search facade (nearby/radius/bbox) behind one swappable backend, and a geocoder proxy (forward/structured/reverse) behind a provider merge-registry, throttled, cached and spend-ledgered per call.",
   "axes": [
     {
