@@ -4,6 +4,20 @@ All notable changes to stapel-geo are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Pre-1.0 semver: **minor = breaking**, patch = compatible.
 
+## [0.3.4] — 2026-08-02
+
+Packaging/CI only, no runtime change.
+
+### Changed
+- CI now tests Python 3.14 (the version production runs) alongside 3.11-3.13.
+- Badge canon; migration-lint step uncommented now that `stapel-tools` is on PyPI.
+- Contract documents (`docs/capabilities.json`, `docs/flows.json`,
+  `docs/errors.json`, `CONFIG.MD`) ship inside the wheel via `package-data` (#184).
+- `docs/llms.txt` — the fifth contract artifact (badge-canon §3), rendered
+  from the hand-authored `docs/capabilities.json` plus the codegen'd
+  triad, wired into `make contract`/`contract-check`, and now packaged
+  into the wheel alongside the other contract artifacts.
+
 ## [0.3.2] — 2026-07-17
 
 Fleet follow-up to stapel-core 0.12.0 (legacy shim sweep). No source
