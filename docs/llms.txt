@@ -1,0 +1,102 @@
+# stapel-geo 0.3.3
+
+Geohash proximity search and geocoding, no GDAL/PostGIS/spatial database: a hierarchical location tree (flat lat/lon points with an auto-encoded geohash and a stable cross-service UUID), a proximity search facade (nearby/radius/bbox) behind one swappable backend, and a geocoder proxy (forward/structured/reverse) behind a provider merge-registry, throttled, cached and spend-ledgered per call.
+
+Contract: axes 2 · extension points 4 · operations 14 · error codes 48 · flows 4.
+Generated from docs/capabilities.json by `stapel-llms-txt` — do not edit; drift-gated by `make contract-check`.
+
+## Configuration axes — what a product switches on
+Settings keys; `default` is what you get by saying nothing. Turning an axis off unmounts the operations it gates.
+- GEOCODER [enum, default "photon"] — Default geocoding provider
+  Default geocoding provider name, resolved through the GEOCODERS merge-registry (built-in photon/nominatim, or a registered name). google/yandex are key-gated stubs a host implements with its own PAYG keys (conf.py, MODULE.md 'Geocoder provider seam').
+- SEARCH_BACKEND [enum, default "stapel_geo.search.postgres.PostgresGeoSearchBackend"] — Proximity search backend
+  Which proximity-search backend serves nearby/radius/bbox. Default runs geohash prefix expansion over the primary database (no extra infra); a Redis GEOSEARCH side-index backend ships for the hot set; Elasticsearch/Solr are named stubs (README.md 'Proximity search facade', conf.py).
+
+## Extension points — what a product replaces, fork-free
+- GEOCODERS [merge_registry]
+  MERGE registry ({name: dotted_path}) over BUILTIN_GEOCODERS (photon/nominatim/google/yandex); None/'' removes a builtin name. Also extendable at runtime via register_geocoder() (geocoding/providers.py, MODULE.md 'Geocoder provider seam').
+- GEOCODE_CACHE_POLICY [dotted_path]
+  REPLACE seam: GeocodeCachePolicy ABC (should_cache/lookup/store); default LedgerCachePolicy answers from the GeocodeCache ledger table within GEOCODE_CACHE_TTL_DAYS (geocoding/cache.py, MODULE.md 'Geocode cache seam').
+- SEARCH_BACKEND [dotted_path]
+  REPLACE seam: implement the GeoSearchBackend protocol (nearby/radius/bbox) and point the setting at your class (search/base.py, MODULE.md 'Search backend seam').
+- serializer_seams [class_override]
+  SerializerSeamMixin on geocoder views (response_serializer_class) and LocationViewSet (a plain DRF ModelViewSet, serializer_class/get_serializer_class) — subclass and remount to swap (views.py, geocoding/views.py, MODULE.md 'Serializer seams').
+
+## Fits with — fleet dependencies
+- stapel-core (required) — comm bus (Functions geo.nearby/geo.radius/geo.bbox/geo.geohash_encode/geo.resolve), AppSettings config layer, flows, error registry (pyproject.toml dependency; conf.py:25, functions.py:25, flows.py:12, errors.py:6)
+
+## HTTP operations (14) — call by operationId, never by a typed path
+Paths are relative to `/geo/api/v1/`.
+### Geocoding
+- GET /geocoding/reverse — geo_api_v1_geocoding_reverse_retrieve
+- GET /geocoding/search — geo_api_v1_geocoding_search_retrieve
+- GET /geocoding/structured — geo_api_v1_geocoding_structured_retrieve
+### Locations
+- GET /locations/by-parent/{parent_id}/ — geo_api_v1_locations_by_parent_list
+- GET /locations/countries/ — geo_api_v1_locations_countries_list
+- POST /locations/ — geo_api_v1_locations_create
+- DELETE /locations/{id}/ — geo_api_v1_locations_destroy
+- GET /locations/ — geo_api_v1_locations_list
+- GET /locations/nearby-by-coords/ — geo_api_v1_locations_nearby_by_coords_list
+- GET /locations/nearby-by-geohash/ — geo_api_v1_locations_nearby_by_geohash_list
+- PATCH /locations/{id}/ — geo_api_v1_locations_partial_update
+- GET /locations/{id}/ — geo_api_v1_locations_retrieve
+- PUT /locations/{id}/ — geo_api_v1_locations_update
+- GET /locations/validate-uuid/{uuid}/ — geo_api_v1_locations_validate_uuid_retrieve
+
+## Error codes (48) — the StapelError envelope
+Render `t(code, params)`; branch UX on the remediation. Localized text lives in docs/errors.<lang>.md, not here.
+- error.400.bad_request [400] fix_input
+- error.400.captcha_invalid [400] retry
+- error.400.captcha_required [400] retry
+- error.400.expected_list [400] fix_input
+- error.400.field.blank [400] fix_input {field}
+- error.400.field.does_not_exist [400] fix_input {field}
+- error.400.field.invalid [400] fix_input {field}
+- error.400.field.invalid_choice [400] fix_input {field}
+- error.400.field.max_length [400] fix_input {field,max_length}
+- error.400.field.max_value [400] fix_input {field,max_value}
+- error.400.field.min_length [400] fix_input {field,min_length}
+- error.400.field.min_value [400] fix_input {field,min_value}
+- error.400.field.null [400] fix_input {field}
+- error.400.field.required [400] fix_input {field}
+- error.400.field.unique [400] fix_input {field}
+- error.400.geohash_required [400] fix_input
+- error.400.invalid_ad_id [400] fix_input
+- error.400.invalid_geojson [400] fix_input
+- error.400.invalid_import_status [400] fix_input
+- error.400.invalid_params [400] fix_input
+- error.400.lat_lon_required [400] fix_input
+- error.400.uuid_required [400] fix_input
+- error.400.validation_error [400] fix_input
+- error.400.verification_failed [400] verify
+- error.400.verification_invalid_factor [400] verify
+- error.401.unauthorized [401] reauthenticate
+- error.402.payment_required [402] retry
+- error.403.forbidden [403] retry
+- error.403.network_blocked [403] contact_support
+- error.403.verification_enrollment_required [403] verify
+- error.403.verification_required [403] verify
+- error.404.ad_not_found [404] retry
+- error.404.not_found [404] retry
+- error.404.verification_challenge_not_found [404] verify
+- error.405.method_not_allowed [405] retry
+- error.406.not_acceptable [406] retry
+- error.408.request_timeout [408] retry
+- error.409.conflict [409] fix_input
+- error.410.gone [410] retry
+- error.413.payload_too_large [413] retry
+- error.415.unsupported_media_type [415] retry
+- error.422.unprocessable_entity [422] wait_and_retry
+- error.423.locked [423] wait_and_retry
+- error.423.verification_locked [423] wait_and_retry
+- error.429.rate_limit [429] wait_and_retry {retry_after_minutes}
+- error.429.too_many_requests [429] wait_and_retry
+- error.500.internal [500] contact_support
+- error.502.geocoder_unavailable [502] retry
+
+## Documented flows (4) — full steps in docs/flows.json
+- geo.geocode_address — Geocode an address
+- geo.location_browse — Browse the location tree
+- geo.location_nearby — Find locations near a point
+- geo.location_resolve — Validate and expand a location reference

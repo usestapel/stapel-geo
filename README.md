@@ -6,6 +6,7 @@
 [![downloads](https://static.pepy.tech/badge/stapel-geo/month)](https://pepy.tech/project/stapel-geo)
 [![python](https://img.shields.io/pypi/pyversions/stapel-geo?logo=python&logoColor=white)](https://pypi.org/project/stapel-geo/)
 [![license](https://img.shields.io/github/license/usestapel/stapel-geo)](https://github.com/usestapel/stapel-geo/blob/main/LICENSE)
+[![llms.txt](https://img.shields.io/badge/llms.txt-blue)](https://github.com/usestapel/stapel-geo/blob/main/docs/llms.txt)
 
 Geohash proximity search and geocoding for the [Stapel framework](https://github.com/usestapel)
 — composable Django apps that deploy as a monolith or as microservices

@@ -9,26 +9,37 @@ PYTHON ?= python3
 
 .PHONY: contract contract-check
 
-# Emit the contract triad + the human-readable error reference into docs/.
+# Emit the contract triad + the human-readable error reference into docs/, plus
+# the fifth artifact docs/llms.txt (stapel_tools.llms_txt — the module's own
+# context slice for an agent; badge-canon §3). llms.txt is rendered from the
+# freshly emitted triad PLUS docs/capabilities.json — the latter is HAND-AUTHORED
+# in this module (no stapel_geo._capabilities emitter exists yet) and is only
+# ever READ here, never written.
 contract:
 	$(PYTHON) -m stapel_geo._codegen --out docs
 	$(PYTHON) -c "from stapel_geo._codegen import _configure; _configure(); \
 	from django.core.management import call_command; \
 	call_command('generate_error_docs', '--out', 'docs')"
+	$(PYTHON) -m stapel_tools.llms_txt . --out docs
 
 # Drift gate: regenerate into a temp dir and diff against the committed docs/*.json.
+# capabilities.json is copied in verbatim (hand-authored, not regenerated) so
+# llms_txt can render against it alongside the freshly regenerated triad.
 contract-check:
 	@tmp=$$(mktemp -d); \
-	$(PYTHON) -m stapel_geo._codegen --out "$$tmp" || { rm -rf "$$tmp"; exit 1; }; \
+	mkdir -p "$$tmp/docs"; \
+	$(PYTHON) -m stapel_geo._codegen --out "$$tmp/docs" || { rm -rf "$$tmp"; exit 1; }; \
+	cp docs/capabilities.json "$$tmp/docs/capabilities.json"; \
+	$(PYTHON) -m stapel_tools.llms_txt "$$tmp" --out "$$tmp/docs" || { rm -rf "$$tmp"; exit 1; }; \
 	rc=0; \
-	for f in schema.json flows.json errors.json; do \
-		if ! cmp -s "docs/$$f" "$$tmp/$$f"; then \
+	for f in schema.json flows.json errors.json llms.txt; do \
+		if ! cmp -s "docs/$$f" "$$tmp/docs/$$f"; then \
 			echo "DRIFT: docs/$$f is stale — run 'make contract' and commit it"; \
-			diff "docs/$$f" "$$tmp/$$f" | head -20; rc=1; \
+			diff "docs/$$f" "$$tmp/docs/$$f" | head -20; rc=1; \
 		fi; \
 	done; \
 	rm -rf "$$tmp"; \
-	if [ $$rc -eq 0 ]; then echo "contract-check: docs/{schema,flows,errors}.json up to date"; fi; \
+	if [ $$rc -eq 0 ]; then echo "contract-check: docs/{schema,flows,errors,llms.txt} up to date"; fi; \
 	exit $$rc
 
 
