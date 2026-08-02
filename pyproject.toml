@@ -57,7 +57,7 @@ stapel_geo = [
     "py.typed",
     "migrations/*.py",
     "schemas/**/*.json",
-    "docs/capabilities.json",
+    "docs/capabilities.json", "docs/llms.txt",
     "docs/flows.json",
     "docs/errors.json",
     "CONFIG.MD",
