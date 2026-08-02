@@ -1,8 +1,11 @@
 # stapel-geo
 
-[![CI](https://github.com/usestapel/stapel-geo/actions/workflows/ci.yml/badge.svg)](https://github.com/usestapel/stapel-geo/actions/workflows/ci.yml)
-[![codecov](https://codecov.io/gh/usestapel/stapel-geo/graph/badge.svg)](https://codecov.io/gh/usestapel/stapel-geo)
-[![PyPI](https://img.shields.io/pypi/v/stapel-geo.svg)](https://pypi.org/project/stapel-geo/)
+[![CI](https://img.shields.io/github/actions/workflow/status/usestapel/stapel-geo/ci.yml?branch=main&logo=github&label=CI)](https://github.com/usestapel/stapel-geo/actions/workflows/ci.yml?query=branch%3Amain)
+[![coverage](https://img.shields.io/codecov/c/github/usestapel/stapel-geo?branch=main&logo=codecov&label=coverage)](https://app.codecov.io/gh/usestapel/stapel-geo)
+[![pypi](https://img.shields.io/pypi/v/stapel-geo?logo=pypi&logoColor=white&label=pypi)](https://pypi.org/project/stapel-geo/)
+[![downloads](https://static.pepy.tech/badge/stapel-geo/month)](https://pepy.tech/project/stapel-geo)
+[![python](https://img.shields.io/pypi/pyversions/stapel-geo?logo=python&logoColor=white)](https://pypi.org/project/stapel-geo/)
+[![license](https://img.shields.io/github/license/usestapel/stapel-geo)](https://github.com/usestapel/stapel-geo/blob/main/LICENSE)
 
 Geohash proximity search and geocoding for the [Stapel framework](https://github.com/usestapel)
 — composable Django apps that deploy as a monolith or as microservices
