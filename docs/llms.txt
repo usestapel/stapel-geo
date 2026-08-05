@@ -2,7 +2,7 @@
 
 Geohash proximity search and geocoding, no GDAL/PostGIS/spatial database: a hierarchical location tree (flat lat/lon points with an auto-encoded geohash and a stable cross-service UUID), a proximity search facade (nearby/radius/bbox) behind one swappable backend, and a geocoder proxy (forward/structured/reverse) behind a provider merge-registry, throttled, cached and spend-ledgered per call.
 
-Contract: axes 2 · extension points 4 · operations 14 · error codes 48 · flows 4.
+Contract: axes 2 · surface 16 · extension points 4 · operations 14 · error codes 48 · flows 4.
 Generated from docs/capabilities.json by `stapel-llms-txt` — do not edit; drift-gated by `make contract-check`.
 
 ## Configuration axes — what a product switches on
@@ -11,6 +11,48 @@ Settings keys; `default` is what you get by saying nothing. Turning an axis off 
   Default geocoding provider name, resolved through the GEOCODERS merge-registry (built-in photon/nominatim, or a registered name). google/yandex are key-gated stubs a host implements with its own PAYG keys (conf.py, MODULE.md 'Geocoder provider seam').
 - SEARCH_BACKEND [enum, default "stapel_geo.search.postgres.PostgresGeoSearchBackend"] — Proximity search backend
   Which proximity-search backend serves nearby/radius/bbox. Default runs geohash prefix expansion over the primary database (no extra infra); a Redis GEOSEARCH side-index backend ships for the hot set; Elasticsearch/Solr are named stubs (README.md 'Proximity search facade', conf.py).
+
+## Usage surface — call these before writing your own
+This is the answer to "does Stapel already have something for X?". `instead of` names the outside symbol this one displaces.
+### gate_function
+- bbox — stapel_geo.services.bbox
+  instead of: a hand-written lat/lon BETWEEN query with no antimeridian handling
+  Locations inside a lat/lon rectangle, antimeridian-aware (min_lon > max_lon wraps) — the in-process equivalent of the geo.bbox comm Function. Call this instead of a hand-written lat/lon BETWEEN query, which silently breaks on a box crossing ±180°.
+- distance_km — stapel_geo.geohash.distance_km
+  instead of: a hand-rolled haversine formula, geohash prefix-similarity used as a distance proxy
+  True great-circle (haversine) distance between two geohashes, decoded to their cell centres and rounded to 2 decimals — correct across the antimeridian and near the poles. Call this instead of writing your own haversine formula or approximating distance from geohash prefix similarity.
+- encode — stapel_geo.geohash.encode
+  instead of: a second geohash-encoding dependency, hand-rolled base32 geohash arithmetic
+  Encode a lat/lon pair to a geohash string of the given precision (pure arithmetic, no DB, no GDAL) — the same helper Location.save() and the geo.geohash_encode comm Function call underneath. Reach for this in-process instead of round-tripping through the comm bus, and instead of pulling in a second geohash library.
+- geocode — stapel_geo.geocoding.service.geocode
+  instead of: calling a Geocoder provider's search/reverse/structured directly, bypassing the cache and the spend ledger
+  The one call path the geocoder proxy views use: provider resolution by name, cache lookup (GEOCODE_CACHE_POLICY), the provider call, and an always-written GeocodeCache spend-ledger row. Call this instead of calling a Geocoder provider directly — a direct call skips the cache and, more importantly, skips the accounting row that makes provider spend visible.
+- nearby — stapel_geo.geohash.nearby
+  instead of: a hand-rolled geohash neighbour-widening / cell-expansion search
+  The proven 9-cell geohash neighbour-widening top-K search — equator/antimeridian/pole safe, with a proven-coverage stopping rule and an authoritative full-scan fallback. This is what PostgresGeoSearchBackend runs underneath; a custom SEARCH_BACKEND implementation should call this instead of re-deriving geohash neighbour widening, which is exactly where the pole/antimeridian edge cases hide.
+- nearby_by_coords — stapel_geo.services.nearby_by_coords
+  Top-K nearest Location summaries to a coordinate pair (nearest-first), through the configured SEARCH_BACKEND — the in-process equivalent of the geo.nearby comm Function. Call this directly when you are already in the same process instead of round-tripping through comm.
+- nearby_by_geohash — stapel_geo.services.nearby_by_geohash
+  Top-K nearest Location summaries to a geohash (decoded to its cell centre) — the in-process equivalent of geo.nearby's geohash form. Prefer this over decoding the geohash yourself and calling nearby_by_coords.
+- nearby_rows_by_coords — stapel_geo.services.nearby_rows_by_coords
+  Same search as nearby_by_coords but returns ORM Location rows (each carrying a .distance_km attribute) instead of summary dicts — reach for this when you need to chain further queryset/model access rather than the cross-service JSON shape.
+- nearby_rows_by_geohash — stapel_geo.services.nearby_rows_by_geohash
+  Same search as nearby_by_geohash but returns ORM Location rows (each carrying .distance_km) — for callers staying inside the ORM rather than consuming the JSON summary shape.
+- radius — stapel_geo.services.radius
+  Every Location within radius_km of a point, ascending distance (membership, not top-K) — the in-process equivalent of the geo.radius comm Function. Call this instead of nearby() with a large limit and a manual distance filter, which is not the same query (nearby is top-K, this is membership).
+- rank_by_proximity — stapel_geo.geohash.rank_by_proximity
+  Sort any iterable of geohash-carrying candidates nearest-first against a target geohash (candidates without a geohash sort last). The building block for a custom STAPEL_GEO['SEARCH_BACKEND']: use it to rank your own candidate set instead of writing another haversine sort.
+- resolve — stapel_geo.services.resolve
+  Resolve a Location UUID to a summary dict for cross-service reference checks (returns {found: false, ...} on a miss, never raises) — the in-process equivalent of the geo.resolve comm Function. Use this instead of a bare Location.objects.filter(uuid=...).first() when another module just needs to validate/expand a stored location_id.
+### factory
+- get_backend — stapel_geo.search.__init__.get_backend
+  Instantiate the configured STAPEL_GEO['SEARCH_BACKEND'], validated against the GeoSearchBackend protocol (nearby/radius/bbox). Reach for this instead of import_string-ing the setting yourself when you need the raw backend object — e.g. RedisGeoSearchBackend's own index()/rebuild() maintenance methods, which the services.py facade does not expose.
+- get_geocoder — stapel_geo.geocoding.service.get_geocoder
+  Instantiate the geocoder provider registered under a name (default STAPEL_GEO['GEOCODER']), validated as a Geocoder subclass. Reach for this instead of resolving the GEOCODERS registry and import_string-ing the class yourself when you need a raw provider call outside the cached/ledgered geocode() path.
+- register_geocoder — stapel_geo.geocoding.providers.register_geocoder
+  Register (or, with None/"", unregister) a geocoder provider by dotted path at runtime, from an AppConfig.ready() — the fork-free way to add a provider without going through the STAPEL_GEO['GEOCODERS'] setting. Runtime registrations win over both the setting and the built-ins.
+- registered_geocoders — stapel_geo.geocoding.providers.registered_geocoders
+  The effective name -> dotted-path geocoder registry (built-ins merged under the GEOCODERS setting merged under runtime register_geocoder() calls). Reach for this instead of re-deriving the merge yourself — e.g. to list available providers in an admin dropdown or a diagnostics endpoint.
 
 ## Extension points — what a product replaces, fork-free
 - GEOCODERS [merge_registry]

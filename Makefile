@@ -10,23 +10,34 @@ PYTHON ?= python3
 .PHONY: contract contract-check
 
 # Emit the contract triad + the human-readable error reference into docs/, plus
-# the fifth artifact docs/llms.txt (stapel_tools.llms_txt — the module's own
-# context slice for an agent; badge-canon §3). llms.txt is rendered from the
-# freshly emitted triad PLUS docs/capabilities.json — the latter is HAND-AUTHORED
-# in this module (no stapel_geo._capabilities emitter exists yet) and is only
-# ever READ here, never written.
+# patch the `surface` section into docs/capabilities.json (stapel_tools.surface
+# --patch — the symbols a product is meant to CALL, discoverability-design.md
+# §1.2; derived by AST from docs/capabilities.meta.json's surface_roots, a
+# selected export with no curated intent fails naming it), plus the fifth
+# artifact docs/llms.txt (stapel_tools.llms_txt — the module's own context
+# slice for an agent; badge-canon §3), rendered from the freshly emitted triad
+# PLUS the patched capabilities.json. The REST of capabilities.json (provides/
+# axes/extension_points/operations_total) is still HAND-AUTHORED in this module
+# (no stapel_geo._capabilities emitter exists yet) — `--patch` touches only
+# module/version and `surface`, leaving everything else byte-for-byte.
 contract:
 	$(PYTHON) -m stapel_geo._codegen --out docs
 	$(PYTHON) -c "from stapel_geo._codegen import _configure; _configure(); \
 	from django.core.management import call_command; \
 	call_command('generate_error_docs', '--out', 'docs')"
+	$(PYTHON) -m stapel_tools.surface . --patch
 	$(PYTHON) -m stapel_tools.llms_txt . --out docs
 
-# Drift gate: regenerate into a temp dir and diff against the committed docs/*.json.
-# capabilities.json is copied in verbatim (hand-authored, not regenerated) so
-# llms_txt can render against it alongside the freshly regenerated triad.
+# Drift gate. `stapel_tools.surface . --patch --check` runs against the real
+# repo (it AST-scans the actual source files named by surface_roots, so it
+# cannot run against a docs/-only temp dir) and compares the freshly patched
+# capabilities.json to the committed one in memory, byte for byte. The triad
+# (schema/flows/errors) + llms.txt still regenerate into a temp dir and diff
+# there, as before; llms.txt is rendered against the (already checked)
+# committed capabilities.json, copied in verbatim for that render.
 contract-check:
-	@tmp=$$(mktemp -d); \
+	@$(PYTHON) -m stapel_tools.surface . --patch --check || exit 1; \
+	tmp=$$(mktemp -d); \
 	mkdir -p "$$tmp/docs"; \
 	$(PYTHON) -m stapel_geo._codegen --out "$$tmp/docs" || { rm -rf "$$tmp"; exit 1; }; \
 	cp docs/capabilities.json "$$tmp/docs/capabilities.json"; \
@@ -39,7 +50,7 @@ contract-check:
 		fi; \
 	done; \
 	rm -rf "$$tmp"; \
-	if [ $$rc -eq 0 ]; then echo "contract-check: docs/{schema,flows,errors,llms.txt} up to date"; fi; \
+	if [ $$rc -eq 0 ]; then echo "contract-check: docs/{capabilities,schema,flows,errors,llms.txt} up to date"; fi; \
 	exit $$rc
 
 
