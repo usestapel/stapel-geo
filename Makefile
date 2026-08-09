@@ -20,6 +20,11 @@ PYTHON ?= python3
 # axes/extension_points/operations_total) is still HAND-AUTHORED in this module
 # (no stapel_geo._capabilities emitter exists yet) — `--patch` touches only
 # module/version and `surface`, leaving everything else byte-for-byte.
+# README.md is the SIXTH artifact (tracker #257): assembled by
+# stapel_tools.readme from docs/readme.md (the human half — what this module
+# is, how to think about it) plus everything emitted above. Badges, version,
+# surface counts and doc links are generated, so a release cannot leave them
+# behind. Edit docs/readme.md; never README.md.
 contract:
 	$(PYTHON) -m stapel_geo._codegen --out docs
 	$(PYTHON) -c "from stapel_geo._codegen import _configure; _configure(); \
@@ -27,6 +32,7 @@ contract:
 	call_command('generate_error_docs', '--out', 'docs')"
 	$(PYTHON) -m stapel_tools.surface . --patch
 	$(PYTHON) -m stapel_tools.llms_txt . --out docs
+	$(PYTHON) -m stapel_tools.readme .
 
 # Drift gate. `stapel_tools.surface . --patch --check` runs against the real
 # repo (it AST-scans the actual source files named by surface_roots, so it
@@ -50,7 +56,8 @@ contract-check:
 		fi; \
 	done; \
 	rm -rf "$$tmp"; \
-	if [ $$rc -eq 0 ]; then echo "contract-check: docs/{capabilities,schema,flows,errors,llms.txt} up to date"; fi; \
+	$(PYTHON) -m stapel_tools.readme . --check || rc=1; \
+	if [ $$rc -eq 0 ]; then echo "contract-check: docs/{capabilities,schema,flows,errors,llms.txt} + README.md up to date"; fi; \
 	exit $$rc
 
 
