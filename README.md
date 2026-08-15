@@ -24,7 +24,7 @@ pip install stapel-geo
 
 | Fact | Value |
 |---|---|
-| Version | `0.3.5` |
+| Version | `0.3.6` |
 | Python | `>=3.11` (3.11, 3.12, 3.13, 3.14) |
 | HTTP operations | 14 |
 | Config axes | 2 |

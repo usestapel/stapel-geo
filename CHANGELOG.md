@@ -4,6 +4,16 @@ All notable changes to stapel-geo are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Pre-1.0 semver: **minor = breaking**, patch = compatible.
 
+## [0.3.6] — 2026-08-15
+
+### Changed — `stapel-core` floor raised to 0.26.0
+
+`docs/errors.json` carries an `owner` per entry, and only stapel-core 0.26.0
+emits it. The floor lagged behind, so a consumer resolving an older core
+regenerated an artifact without `owner` and the drift gate went red — the
+field was declared but never required. The floor now matches the artifact
+that is committed.
+
 ## [0.3.5] — 2026-08-02
 
 ### Fixed — `tests/test_contract.py` (added in 0.3.4) needs `stapel-tools` on the release track too
