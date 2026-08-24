@@ -2,7 +2,8 @@
 
 Routes (relative to the mount):
 - ``locations/`` ... location tree, search, countries, nearby, validate-uuid
-- ``geocoding/`` ... geocoder proxy (search / structured / reverse)
+- ``geocoding/`` ... geocoder proxy (search / structured / reverse / resolve)
+- ``map/config`` ... basemap + picker configuration (public)
 
 The geocoder proxy is mountable on its own from
 ``stapel_geo.geocoding.urls`` if the location tree is not wanted.
@@ -10,6 +11,7 @@ The geocoder proxy is mountable on its own from
 from django.urls import include, path
 from stapel_core.django.api.routers import OptionalSlashRouter
 
+from .basemap import MapConfigView
 from .views import LocationViewSet
 
 router = OptionalSlashRouter()
@@ -18,4 +20,5 @@ router.register(r"locations", LocationViewSet, basename="location")
 urlpatterns = [
     path("", include(router.urls)),
     path("geocoding/", include("stapel_geo.geocoding.urls")),
+    path("map/config", MapConfigView.as_view(), name="map-config"),
 ]

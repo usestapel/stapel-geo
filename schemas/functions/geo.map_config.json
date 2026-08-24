@@ -1,0 +1,8 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "geo.map_config",
+  "description": "The basemap and location-picker configuration a map needs before its first frame: tile URL template, the attribution the ODbL licence obliges the map to display, the zoom envelope, the product's operating bbox, and the search-as-you-type discipline. Same payload as GET /geo/api/v1/map/config, for server-rendered hosts. Takes no arguments; touches neither the database nor the network.",
+  "type": "object",
+  "properties": {},
+  "additionalProperties": false
+}

@@ -162,6 +162,14 @@
     "owner": "stapel_core"
   },
   {
+    "code": "error.400.invalid_bbox",
+    "status": 400,
+    "params": [],
+    "remediation": "fix_input",
+    "en": "Bounding box must be min_lon,min_lat,max_lon,max_lat",
+    "owner": "stapel_geo"
+  },
+  {
     "code": "error.400.invalid_geojson",
     "status": 400,
     "params": [],
@@ -410,5 +418,13 @@
     "remediation": "retry",
     "en": "Geocoding provider is unavailable",
     "owner": "stapel_geo"
+  },
+  {
+    "code": "error.503.mandate_unavailable",
+    "status": 503,
+    "params": [],
+    "remediation": "retry",
+    "en": "Cannot verify workspace mandate right now",
+    "owner": "stapel_core"
   }
 ]

@@ -33,6 +33,7 @@ import requests
 from ..conf import geo_settings
 from .base import Geocoder, GeocoderError
 from .dto import GeocodeFeature, GeocodeGeometry, GeocodeProperties, GeocodeResponse
+from .format import apply_formatter
 
 logger = logging.getLogger(__name__)
 
@@ -56,13 +57,40 @@ class PhotonGeocoder(Geocoder):
     def resolve_language(self, lang: str | None) -> str | None:
         """Clamp *lang* to a language the configured Photon bundle indexes.
 
-        An unsupported (or missing) language falls back to English; ``None``
-        is passed through so Photon applies its own default.
+        Photon does **not** degrade gracefully here. Ask it for a language
+        its index was not built with and it answers HTTP 400 with a body
+        like ``{"lang":[{"message":"Language is not supported. Supported
+        are: default, de, en, fr","value":"ru"}]}`` — its documented
+        "falls back to ``-default-language``" behaviour is about a
+        *supported* language with a missing translation, not about a
+        language the index never had. So the clamp is mandatory, and what
+        it clamps *to* is the whole ballgame:
+
+        - an exact match is forwarded as-is;
+        - a regional tag is retried on its base subtag (``ru-RU`` -> ``ru``,
+          ``pt_BR`` -> ``pt``) — an ``Accept-Language`` header is normally
+          regional and would otherwise never match;
+        - anything left over goes to ``PHOTON_LANGUAGE_FALLBACK``, whose
+          default ``"default"`` is Photon's LOCAL-NAME mode. That is the
+          fix for the bug this replaced: the old code clamped to ``"en"``,
+          so a Russian product asking for ``lang=ru`` against a stock
+          GraphHopper dump silently received *English* street names — no
+          error, no log line, wrong answer. ``default`` returns
+          "Тверская улица" where ``en`` returned "Tverskaya Street".
+
+        ``None`` is passed through untouched so Photon applies its own
+        default. The language actually sent is echoed back on
+        :attr:`GeocodeResponse.lang` so a caller can see the clamp happen.
         """
         if lang is None:
             return None
-        supported = set(geo_settings.PHOTON_LANGUAGES)
-        return lang if lang in supported else "en"
+        supported = {str(code) for code in (geo_settings.PHOTON_LANGUAGES or [])}
+        if lang in supported:
+            return lang
+        base = str(lang).replace("_", "-").split("-")[0].lower()
+        if base in supported:
+            return base
+        return geo_settings.PHOTON_LANGUAGE_FALLBACK or None
 
     def _get(self, path: str, params: dict) -> GeocodeResponse:
         cleaned = {k: v for k, v in params.items() if v is not None}
@@ -72,19 +100,65 @@ class PhotonGeocoder(Geocoder):
             )
             resp.raise_for_status()
             payload = resp.json()
+        except requests.HTTPError as exc:
+            # Photon puts the REASON in the body (unsupported language,
+            # malformed bbox, ...). Swallowing it leaves a bare 502 and no
+            # way to tell a misconfiguration from an outage.
+            detail = ""
+            try:
+                detail = f" body={exc.response.text[:300]!r}"
+            except Exception:  # noqa: BLE001 — diagnostics are best-effort
+                pass
+            raise GeocoderError(
+                f"Photon request to {path} failed: {exc}{detail}"
+            ) from exc
         except requests.RequestException as exc:
             raise GeocoderError(f"Photon request to {path} failed: {exc}") from exc
         except ValueError as exc:  # non-JSON body
             raise GeocoderError(f"Photon returned a non-JSON response: {exc}") from exc
-        return _parse_geojson(payload)
+        response = _parse_geojson(payload)
+        response.lang = cleaned.get("lang")
+        return response
 
-    def search(self, query, *, lang=None, limit=None, **params):
+    def search(
+        self,
+        query,
+        *,
+        lang=None,
+        limit=None,
+        bbox=None,
+        bias_lat=None,
+        bias_lon=None,
+        bias_scale=None,
+        zoom=None,
+        **params,
+    ):
+        """Forward geocoding, with the two map-shaped narrowings Photon offers.
+
+        ``bbox`` (``[min_lon, min_lat, max_lon, max_lat]``) is a hard
+        restriction — results outside the rectangle are not returned at
+        all. ``bias_lat``/``bias_lon`` (+ optional ``bias_scale`` 0.0-1.0
+        and ``zoom``) are a soft one: results near the point rank higher
+        but distant matches still appear. A map picker wants the bias
+        (the user's viewport) and a country-scoped product wants the
+        bbox; they compose.
+        """
         return self._get(
             "/api",
-            {"q": query, "lang": self.resolve_language(lang), "limit": limit, **params},
+            {
+                "q": query,
+                "lang": self.resolve_language(lang),
+                "limit": limit,
+                "bbox": _bbox_param(bbox),
+                "lat": bias_lat,
+                "lon": bias_lon,
+                "location_bias_scale": bias_scale,
+                "zoom": zoom,
+                **params,
+            },
         )
 
-    def reverse(self, lat, lng, *, lang=None, limit=None, **params):
+    def reverse(self, lat, lng, *, lang=None, limit=None, radius_km=None, **params):
         return self._get(
             "/reverse",
             {
@@ -92,6 +166,7 @@ class PhotonGeocoder(Geocoder):
                 "lon": lng,
                 "lang": self.resolve_language(lang),
                 "limit": limit,
+                "radius": radius_km,
                 **params,
             },
         )
@@ -160,16 +235,48 @@ class NominatimGeocoder(Geocoder):
             raise GeocoderError(f"Nominatim request to {path} failed: {exc}") from exc
         except ValueError as exc:
             raise GeocoderError(f"Nominatim returned a non-JSON response: {exc}") from exc
-        return _parse_nominatim(payload)
+        response = _parse_nominatim(payload)
+        response.lang = cleaned.get("accept-language")
+        return response
 
-    def search(self, query, *, lang=None, limit=None, **params):
+    def search(
+        self,
+        query,
+        *,
+        lang=None,
+        limit=None,
+        bbox=None,
+        bias_lat=None,
+        bias_lon=None,
+        bias_scale=None,
+        zoom=None,
+        **params,
+    ):
+        """Forward geocoding. ``bbox`` becomes a bounded ``viewbox``.
+
+        Nominatim has no soft location bias, so ``bias_lat``/``bias_lon``/
+        ``bias_scale``/``zoom`` are accepted (the facade's verb signature is
+        provider-agnostic) and ignored — a bias that silently became a hard
+        restriction would drop results the caller asked to merely rank lower.
+        """
+        narrowing = {}
+        rendered = _bbox_param(bbox)
+        if rendered:
+            narrowing["viewbox"] = rendered
+            narrowing["bounded"] = 1
         return self._get(
             "/search",
-            {"q": query, "accept-language": lang, "limit": limit, **params},
+            {
+                "q": query,
+                "accept-language": lang,
+                "limit": limit,
+                **narrowing,
+                **params,
+            },
         )
 
-    def reverse(self, lat, lng, *, lang=None, limit=None, **params):
-        # /reverse returns a single result; limit does not apply.
+    def reverse(self, lat, lng, *, lang=None, limit=None, radius_km=None, **params):
+        # /reverse returns a single result; limit and radius do not apply.
         return self._get(
             "/reverse", {"lat": lat, "lon": lng, "accept-language": lang, **params}
         )
@@ -291,6 +398,19 @@ def registered_geocoders() -> dict[str, str]:
 # ---------------------------------------------------------------------------
 
 
+def _bbox_param(bbox) -> str | None:
+    """Render a bbox as the ``min_lon,min_lat,max_lon,max_lat`` string.
+
+    Accepts the sequence form (what settings and the HTTP layer carry) or a
+    ready-made string (what a caller passing through raw extras sends).
+    """
+    if bbox is None or bbox == "":
+        return None
+    if isinstance(bbox, str):
+        return bbox
+    return ",".join(str(value) for value in bbox)
+
+
 def _parse_geojson(payload: dict) -> GeocodeResponse:
     """Map a Photon-style GeoJSON FeatureCollection into the normalized DTO."""
     features: list[GeocodeFeature] = []
@@ -304,11 +424,14 @@ def _parse_geojson(payload: dict) -> GeocodeResponse:
                     type=geometry.get("type", "Point"),
                     coordinates=geometry.get("coordinates", []),
                 ),
-                properties=GeocodeProperties(
-                    **{
-                        key: props.get(key)
-                        for key in GeocodeProperties.__dataclass_fields__
-                    }
+                properties=apply_formatter(
+                    GeocodeProperties(
+                        **{
+                            key: props.get(key)
+                            for key in GeocodeProperties.__dataclass_fields__
+                            if key != "formatted"
+                        }
+                    )
                 ),
             )
         )
@@ -339,7 +462,7 @@ def _parse_nominatim(payload: dict) -> GeocodeResponse:
                     type=geometry.get("type", "Point"),
                     coordinates=geometry.get("coordinates", []),
                 ),
-                properties=GeocodeProperties(
+                properties=apply_formatter(GeocodeProperties(
                     name=props.get("name") or props.get("display_name"),
                     country=address.get("country"),
                     countrycode=(address.get("country_code") or "").upper() or None,
@@ -355,7 +478,7 @@ def _parse_nominatim(payload: dict) -> GeocodeResponse:
                     housenumber=address.get("house_number"),
                     postcode=address.get("postcode"),
                     extent=list(bbox) if bbox else None,
-                ),
+                )),
             )
         )
     return GeocodeResponse(

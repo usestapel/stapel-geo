@@ -1,6 +1,6 @@
 # Errors — English
 
-`48` error keys. Canonical texts live in the code (`register_service_errors`); localized texts in `translations/errors.en.json`.
+`50` error keys. Canonical texts live in the code (`register_service_errors`); localized texts in `translations/errors.en.json`.
 
 | Code | Status | Params | Remediation | Text |
 |---|---|---|---|---|
@@ -21,6 +21,7 @@
 | `error.400.field.unique` | 400 | `field` | `fix_input` | {field} must be unique |
 | `error.400.geohash_required` | 400 | — | `fix_input` | Geohash is required |
 | `error.400.invalid_ad_id` | 400 | — | `fix_input` | Invalid advertisement ID |
+| `error.400.invalid_bbox` | 400 | — | `fix_input` | Bounding box must be min_lon,min_lat,max_lon,max_lat |
 | `error.400.invalid_geojson` | 400 | — | `fix_input` | GeoJSON file is invalid |
 | `error.400.invalid_import_status` | 400 | — | `fix_input` | Cannot retry import with current status |
 | `error.400.invalid_params` | 400 | — | `fix_input` | One or more query parameters are invalid |
@@ -52,3 +53,4 @@
 | `error.429.too_many_requests` | 429 | — | `wait_and_retry` | Too many requests. Please try again later. |
 | `error.500.internal` | 500 | — | `contact_support` | Something went wrong |
 | `error.502.geocoder_unavailable` | 502 | — | `retry` | Geocoding provider is unavailable |
+| `error.503.mandate_unavailable` | 503 | — | `retry` | Cannot verify workspace mandate right now |

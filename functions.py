@@ -9,6 +9,14 @@ importing it (comm-by-name):
 - ``geo.geohash_encode`` — pure lat/lon -> geohash (consumers stamp their
   own rows, e.g. listings' ``geohash`` column, without importing geo).
 - ``geo.resolve`` — validate/expand a location UUID for address consumers.
+- ``geo.geocode`` — address text -> normalized places (forward geocoding).
+- ``geo.reverse_geocode`` — a coordinate -> one confirmable address.
+- ``geo.map_config`` — the basemap/picker configuration a server-rendered
+  host needs before it can draw a map.
+
+The three geocoding Functions go through the same cached, ledgered
+service path as the HTTP proxy, so a module calling by name is subject to
+the same accounting as a browser calling the endpoint.
 
 ``nearby``/``radius``/``bbox`` all call the **search facade**
 (``stapel_geo.search.get_backend()``) via the service layer — one code
@@ -115,10 +123,84 @@ def resolve_function(payload: dict) -> dict:
     return services.resolve(payload["uuid"])
 
 
+@function("geo.geocode", schema=_schema("geo.geocode"))
+def geocode_function(payload: dict) -> dict:
+    """Forward-geocode address text (cached, ledgered, provider-agnostic).
+
+    Payload: ``{"q": "<text>"[, "lang", "limit", "bbox", "bias_lat",
+    "bias_lon"]}``. Returns the normalized GeoJSON FeatureCollection as a
+    dict: ``{"type", "features": [...], "lang"}``. Every feature's
+    ``properties.formatted`` is the ready-to-display line.
+
+    Raises ``GeocoderError`` when the provider is unreachable — a caller
+    over comm sees the failure rather than an empty result set, because
+    "no matches" and "the geocoder is down" are different answers.
+    """
+    from dataclasses import asdict
+
+    from .geocoding.service import geocode
+
+    response = geocode(
+        "search",
+        query=payload["q"],
+        lang=payload.get("lang"),
+        limit=payload.get("limit"),
+        bbox=payload.get("bbox"),
+        bias_lat=payload.get("bias_lat"),
+        bias_lon=payload.get("bias_lon"),
+    )
+    return asdict(response)
+
+
+@function("geo.reverse_geocode", schema=_schema("geo.reverse_geocode"))
+def reverse_geocode_function(payload: dict) -> dict:
+    """Turn a coordinate into one confirmable address (the resolve verb).
+
+    Payload: ``{"lat": <num>, "lon": <num>[, "lang", "limit", "nearest"]}``.
+    Returns the ``PlaceResolution`` dict: the point, its geohash, the
+    display line, the address components, the best feature, the
+    alternatives, and (when ``nearest`` > 0) nearby known locations.
+
+    This is what a listings backend calls to stamp a human address onto a
+    row it only has coordinates for.
+    """
+    from dataclasses import asdict
+
+    from .geocoding.service import resolve_point
+
+    resolution = resolve_point(
+        payload["lat"],
+        payload["lon"],
+        lang=payload.get("lang"),
+        limit=payload.get("limit"),
+        nearest=payload.get("nearest", 0),
+    )
+    return asdict(resolution)
+
+
+@function("geo.map_config", schema=_schema("geo.map_config"))
+def map_config_function(payload: dict) -> dict:
+    """The basemap + picker configuration (no arguments, no DB, no network).
+
+    Returns the same payload as ``GET /geo/api/v1/map/config`` — tile
+    template, the attribution the licence obliges the map to show, the
+    zoom envelope, the operating bbox and the search-as-you-type
+    discipline — for hosts that render the page server-side.
+    """
+    from dataclasses import asdict
+
+    from .basemap import build_map_config
+
+    return asdict(build_map_config())
+
+
 __all__ = [
     "nearby_function",
     "radius_function",
     "bbox_function",
     "geohash_encode_function",
     "resolve_function",
+    "geocode_function",
+    "reverse_geocode_function",
+    "map_config_function",
 ]

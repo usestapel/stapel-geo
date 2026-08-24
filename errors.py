@@ -11,6 +11,7 @@ ERR_400_UUID_REQUIRED = "error.400.uuid_required"
 ERR_400_INVALID_IMPORT_STATUS = "error.400.invalid_import_status"
 ERR_400_INVALID_GEOJSON = "error.400.invalid_geojson"
 ERR_400_INVALID_PARAMS = "error.400.invalid_params"
+ERR_400_INVALID_BBOX = "error.400.invalid_bbox"
 ERR_502_GEOCODER_UNAVAILABLE = "error.502.geocoder_unavailable"
 
 STAPEL_GEO_ERRORS = {
@@ -20,6 +21,7 @@ STAPEL_GEO_ERRORS = {
     ERR_400_INVALID_IMPORT_STATUS: "Cannot retry import with current status",
     ERR_400_INVALID_GEOJSON: "GeoJSON file is invalid",
     ERR_400_INVALID_PARAMS: "One or more query parameters are invalid",
+    ERR_400_INVALID_BBOX: "Bounding box must be min_lon,min_lat,max_lon,max_lat",
     ERR_502_GEOCODER_UNAVAILABLE: "Geocoding provider is unavailable",
 }
 
@@ -33,5 +35,6 @@ __all__ = [
     "ERR_400_INVALID_IMPORT_STATUS",
     "ERR_400_INVALID_GEOJSON",
     "ERR_400_INVALID_PARAMS",
+    "ERR_400_INVALID_BBOX",
     "ERR_502_GEOCODER_UNAVAILABLE",
 ]

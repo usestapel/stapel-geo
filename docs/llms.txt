@@ -1,8 +1,8 @@
-# stapel-geo 0.3.6
+# stapel-geo 0.4.0
 
 Geohash proximity search and geocoding, no GDAL/PostGIS/spatial database: a hierarchical location tree (flat lat/lon points with an auto-encoded geohash and a stable cross-service UUID), a proximity search facade (nearby/radius/bbox) behind one swappable backend, and a geocoder proxy (forward/structured/reverse) behind a provider merge-registry, throttled, cached and spend-ledgered per call.
 
-Contract: axes 2 · surface 16 · extension points 4 · operations 14 · error codes 48 · flows 4.
+Contract: axes 2 · surface 21 · extension points 4 · operations 16 · error codes 50 · flows 5.
 Generated from docs/capabilities.json by `stapel-llms-txt` — do not edit; drift-gated by `make contract-check`.
 
 ## Configuration axes — what a product switches on
@@ -15,6 +15,8 @@ Settings keys; `default` is what you get by saying nothing. Turning an axis off 
 ## Usage surface — call these before writing your own
 This is the answer to "does Stapel already have something for X?". `instead of` names the outside symbol this one displaces.
 ### gate_function
+- apply_formatter — stapel_geo.geocoding.format.apply_formatter
+  Stamp properties.formatted on a GeocodeProperties using the configured ADDRESS_FORMATTER, swallowing a formatter's exception into a null label. A custom Geocoder implementation calls this on every feature it maps, so third-party providers carry the same display line as the built-in ones.
 - bbox — stapel_geo.services.bbox
   instead of: a hand-written lat/lon BETWEEN query with no antimeridian handling
   Locations inside a lat/lon rectangle, antimeridian-aware (min_lon > max_lon wraps) — the in-process equivalent of the geo.bbox comm Function. Call this instead of a hand-written lat/lon BETWEEN query, which silently breaks on a box crossing ±180°.
@@ -24,6 +26,9 @@ This is the answer to "does Stapel already have something for X?". `instead of` 
 - encode — stapel_geo.geohash.encode
   instead of: a second geohash-encoding dependency, hand-rolled base32 geohash arithmetic
   Encode a lat/lon pair to a geohash string of the given precision (pure arithmetic, no DB, no GDAL) — the same helper Location.save() and the geo.geohash_encode comm Function call underneath. Reach for this in-process instead of round-tripping through the comm bus, and instead of pulling in a second geohash library.
+- format_address — stapel_geo.geocoding.format.format_address
+  instead of: each product joining name/street/housenumber/city/country its own way
+  Build the one-line human label for a geocoded place from its components, in the country's own postal order (house number before or after the street). Already applied to every feature this library returns as properties.formatted — call it directly only when you hold GeocodeProperties you assembled yourself, and override it fleet-wide via STAPEL_GEO['ADDRESS_FORMATTER'] rather than reformatting per product.
 - geocode — stapel_geo.geocoding.service.geocode
   instead of: calling a Geocoder provider's search/reverse/structured directly, bypassing the cache and the spend ledger
   The one call path the geocoder proxy views use: provider resolution by name, cache lookup (GEOCODE_CACHE_POLICY), the provider call, and an always-written GeocodeCache spend-ledger row. Call this instead of calling a Geocoder provider directly — a direct call skips the cache and, more importantly, skips the accounting row that makes provider spend visible.
@@ -44,7 +49,14 @@ This is the answer to "does Stapel already have something for X?". `instead of` 
   Sort any iterable of geohash-carrying candidates nearest-first against a target geohash (candidates without a geohash sort last). The building block for a custom STAPEL_GEO['SEARCH_BACKEND']: use it to rank your own candidate set instead of writing another haversine sort.
 - resolve — stapel_geo.services.resolve
   Resolve a Location UUID to a summary dict for cross-service reference checks (returns {found: false, ...} on a miss, never raises) — the in-process equivalent of the geo.resolve comm Function. Use this instead of a bare Location.objects.filter(uuid=...).first() when another module just needs to validate/expand a stored location_id.
+- resolve_point — stapel_geo.geocoding.service.resolve_point
+  instead of: a composer that just stores raw latitude/longitude and never resolves an address, geocode('reverse') followed by hand-assembled address text and a separate geohash call
+  Turn one coordinate pair into a CONFIRMABLE place in a single round trip: the display line, the address components, the geohash to store, the runner-up candidates, and optionally the nearest known Location rows. This is the server half of 'detect my position' and of a dropped map pin. Call this instead of chaining geocode('reverse') + your own label assembly + your own geohash call — that chain is exactly what every product was rebuilding.
+- street_line — stapel_geo.geocoding.format.street_line
+  Just the street half of an address — street and house number joined in the order that country writes them ('7 Tverskaya Street' vs 'Тверская улица, 7'). Reach for this when you render address components in your own layout and only need the one line the anglocentric default gets backwards.
 ### factory
+- build_map_config — stapel_geo.basemap.build_map_config
+  Assemble the location picker's configuration from STAPEL_GEO — tile template, the attribution the ODbL licence obliges the map to display, the zoom envelope, the operating bbox, the search-as-you-type discipline. Reach for this in a server-rendered host instead of reading the MAP_* settings one by one, so the page and the geo-react picker cannot disagree about what the map is allowed to do.
 - get_backend — stapel_geo.search.__init__.get_backend
   Instantiate the configured STAPEL_GEO['SEARCH_BACKEND'], validated against the GeoSearchBackend protocol (nearby/radius/bbox). Reach for this instead of import_string-ing the setting yourself when you need the raw backend object — e.g. RedisGeoSearchBackend's own index()/rebuild() maintenance methods, which the services.py facade does not expose.
 - get_geocoder — stapel_geo.geocoding.service.get_geocoder
@@ -67,9 +79,10 @@ This is the answer to "does Stapel already have something for X?". `instead of` 
 ## Fits with — fleet dependencies
 - stapel-core (required) — comm bus (Functions geo.nearby/geo.radius/geo.bbox/geo.geohash_encode/geo.resolve), AppSettings config layer, flows, error registry (pyproject.toml dependency; conf.py:25, functions.py:25, flows.py:12, errors.py:6)
 
-## HTTP operations (14) — call by operationId, never by a typed path
+## HTTP operations (16) — call by operationId, never by a typed path
 Paths are relative to `/geo/api/v1/`.
 ### Geocoding
+- GET /geocoding/resolve — geo_api_v1_geocoding_resolve_retrieve
 - GET /geocoding/reverse — geo_api_v1_geocoding_reverse_retrieve
 - GET /geocoding/search — geo_api_v1_geocoding_search_retrieve
 - GET /geocoding/structured — geo_api_v1_geocoding_structured_retrieve
@@ -85,8 +98,10 @@ Paths are relative to `/geo/api/v1/`.
 - GET /locations/{id}/ — geo_api_v1_locations_retrieve
 - PUT /locations/{id}/ — geo_api_v1_locations_update
 - GET /locations/validate-uuid/{uuid}/ — geo_api_v1_locations_validate_uuid_retrieve
+### Map
+- GET /map/config — geo_api_v1_map_config_retrieve
 
-## Error codes (48) — the StapelError envelope
+## Error codes (50) — the StapelError envelope
 Render `t(code, params)`; branch UX on the remediation. Localized text lives in docs/errors.<lang>.md, not here.
 - error.400.bad_request [400] fix_input
 - error.400.captcha_invalid [400] retry
@@ -105,6 +120,7 @@ Render `t(code, params)`; branch UX on the remediation. Localized text lives in 
 - error.400.field.unique [400] fix_input {field}
 - error.400.geohash_required [400] fix_input
 - error.400.invalid_ad_id [400] fix_input
+- error.400.invalid_bbox [400] fix_input
 - error.400.invalid_geojson [400] fix_input
 - error.400.invalid_import_status [400] fix_input
 - error.400.invalid_params [400] fix_input
@@ -136,9 +152,11 @@ Render `t(code, params)`; branch UX on the remediation. Localized text lives in 
 - error.429.too_many_requests [429] wait_and_retry
 - error.500.internal [500] contact_support
 - error.502.geocoder_unavailable [502] retry
+- error.503.mandate_unavailable [503] retry
 
-## Documented flows (4) — full steps in docs/flows.json
+## Documented flows (5) — full steps in docs/flows.json
 - geo.geocode_address — Geocode an address
 - geo.location_browse — Browse the location tree
 - geo.location_nearby — Find locations near a point
 - geo.location_resolve — Validate and expand a location reference
+- geo.pick_location — Pick a location on a map

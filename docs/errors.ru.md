@@ -1,6 +1,6 @@
 # Errors — Русский
 
-`48` error keys. Canonical texts live in the code (`register_service_errors`); localized texts in `translations/errors.ru.json`.
+`50` error keys. Canonical texts live in the code (`register_service_errors`); localized texts in `translations/errors.ru.json`.
 
 | Код | Статус | Параметры | Действие | Текст |
 |---|---|---|---|---|
@@ -21,6 +21,7 @@
 | `error.400.field.unique` | 400 | `field` | `fix_input` | Значение поля «{field}» должно быть уникальным |
 | `error.400.geohash_required` | 400 | — | `fix_input` | Geohash is required _(en)_ |
 | `error.400.invalid_ad_id` | 400 | — | `fix_input` | Недопустимый идентификатор объявления |
+| `error.400.invalid_bbox` | 400 | — | `fix_input` | Bounding box must be min_lon,min_lat,max_lon,max_lat _(en)_ |
 | `error.400.invalid_geojson` | 400 | — | `fix_input` | GeoJSON file is invalid _(en)_ |
 | `error.400.invalid_import_status` | 400 | — | `fix_input` | Cannot retry import with current status _(en)_ |
 | `error.400.invalid_params` | 400 | — | `fix_input` | One or more query parameters are invalid _(en)_ |
@@ -52,3 +53,4 @@
 | `error.429.too_many_requests` | 429 | — | `wait_and_retry` | Слишком много запросов. Пожалуйста, повторите попытку позже. |
 | `error.500.internal` | 500 | — | `contact_support` | Что-то пошло не так |
 | `error.502.geocoder_unavailable` | 502 | — | `retry` | Geocoding provider is unavailable _(en)_ |
+| `error.503.mandate_unavailable` | 503 | — | `retry` | Не удалось проверить доступ к рабочему пространству |

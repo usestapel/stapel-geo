@@ -2,7 +2,7 @@
 
 ### [Geocode an address](geo.geocode_address.md)
 
-`geo.geocode_address` · 4 steps · Actors: Authenticated user
+`geo.geocode_address` · 7 steps · Actors: Authenticated user
 
 A logged-in user turns free text, address components or a coordinate into normalized GeoJSON places through the swappable provider registry (photon by default; nominatim as keyless dev/fallback). Every call is throttled (scope 'geocoding'), cached (GeocodeCache, 30-day TTL) and written to the spend ledger.
 
@@ -24,6 +24,12 @@ A consumer (listings' radius filter, a 'near me' UI) asks which known locations 
 
 A module holding an opaque location UUID (a listing's location_id, a calendar address) checks it still exists and expands it to a display summary. A missing UUID is a normal answer, not an error.
 
+### [Pick a location on a map](geo.pick_location.md)
+
+`geo.pick_location` · 7 steps · Actors: Any user, Frontends (geo-react)
+
+A human chooses WHERE something is — a listing's address, a meeting point, a service area — by searching for it, by letting the browser report their position, or by dragging a pin. The library owns the whole round trip: the basemap's tile layer and its attribution obligations, the search-as-you-type discipline, and the single call that turns a coordinate into an address the user can confirm. A product that only offers raw latitude and longitude fields has not integrated this flow.
+
 ## Endpoint → flow
 
 - `GET /geo/api/v1/^locations/?$` → geo.location_browse
@@ -38,6 +44,8 @@ A module holding an opaque location UUID (a listing's location_id, a calendar ad
 - `GET /geo/api/v1/^locations/nearby-by-geohash/?\.(?P<format>[a-z0-9]+)/?$` → geo.location_nearby
 - `GET /geo/api/v1/^locations/validate-uuid/(?P<uuid>[^/.]+)/?$` → geo.location_resolve
 - `GET /geo/api/v1/^locations/validate-uuid/(?P<uuid>[^/.]+)/?\.(?P<format>[a-z0-9]+)/?$` → geo.location_resolve
+- `GET /geo/api/v1/geocoding/resolve` → geo.geocode_address, geo.pick_location
 - `GET /geo/api/v1/geocoding/reverse` → geo.geocode_address
-- `GET /geo/api/v1/geocoding/search` → geo.geocode_address
+- `GET /geo/api/v1/geocoding/search` → geo.geocode_address, geo.pick_location
 - `GET /geo/api/v1/geocoding/structured` → geo.geocode_address
+- `GET /geo/api/v1/map/config` → geo.pick_location

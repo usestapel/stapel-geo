@@ -5,10 +5,99 @@
     "version": "0.0.0"
   },
   "paths": {
+    "/geo/api/v1/geocoding/resolve": {
+      "get": {
+        "operationId": "geo_api_v1_geocoding_resolve_retrieve",
+        "description": "One coordinate pair in, one confirmable place out.\n\nThe endpoint the browser's ``navigator.geolocation`` result goes\nstraight to, and the one a dragged map pin goes to on drop. It answers\nwith the display line, the address components, the geohash to store\nand the runner-up candidates — everything a \"is this your address?\"\nconfirmation step renders, in one round trip.",
+        "summary": "Resolve a coordinate pair to a confirmable place",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "lang",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "lat",
+            "schema": {
+              "type": "number",
+              "format": "float"
+            },
+            "required": true
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer"
+            },
+            "description": "Candidates to consider (1 pick + alternatives)."
+          },
+          {
+            "in": "query",
+            "name": "lon",
+            "schema": {
+              "type": "number",
+              "format": "float"
+            },
+            "required": true
+          },
+          {
+            "in": "query",
+            "name": "nearest",
+            "schema": {
+              "type": "integer"
+            },
+            "description": "Also return N nearest known Location rows (0 = none)."
+          },
+          {
+            "in": "query",
+            "name": "radius_km",
+            "schema": {
+              "type": "number",
+              "format": "float"
+            }
+          }
+        ],
+        "tags": [
+          "Geocoding"
+        ],
+        "security": [
+          {
+            "JWTCookieAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlaceResolution"
+                },
+                "examples": {
+                  "PlaceResolution": {
+                    "value": {
+                      "lat": 52.51667,
+                      "lon": 13.38333,
+                      "geohash": "u33dc0cp",
+                      "lang": "default",
+                      "formatted": "Unter den Linden, 1, Berlin, Germany"
+                    }
+                  }
+                }
+              }
+            },
+            "description": ""
+          }
+        }
+      }
+    },
     "/geo/api/v1/geocoding/reverse": {
       "get": {
         "operationId": "geo_api_v1_geocoding_reverse_retrieve",
-        "description": "Reverse geocoding — coordinates to address.\n\n**Permissions:** `IsNotAnonymousUser`",
+        "description": "Reverse geocoding — coordinates to address.",
         "summary": "Reverse geocode coordinates",
         "parameters": [
           {
@@ -42,6 +131,15 @@
               "format": "float"
             },
             "required": true
+          },
+          {
+            "in": "query",
+            "name": "radius_km",
+            "schema": {
+              "type": "number",
+              "format": "float"
+            },
+            "description": "How far the provider may look for a match."
           }
         ],
         "tags": [
@@ -62,7 +160,8 @@
                 "examples": {
                   "GeocodeResponse": {
                     "value": {
-                      "type": "FeatureCollection"
+                      "type": "FeatureCollection",
+                      "lang": "default"
                     }
                   }
                 }
@@ -76,9 +175,44 @@
     "/geo/api/v1/geocoding/search": {
       "get": {
         "operationId": "geo_api_v1_geocoding_search_retrieve",
-        "description": "Forward geocoding — search places by free-text query.\n\n**Permissions:** `IsNotAnonymousUser`",
+        "description": "Forward geocoding — search places by free-text query.",
         "summary": "Search places by text",
         "parameters": [
+          {
+            "in": "query",
+            "name": "bbox",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Hard restriction 'min_lon,min_lat,max_lon,max_lat'; defaults to STAPEL_GEO['MAP_BBOX']."
+          },
+          {
+            "in": "query",
+            "name": "bias_lat",
+            "schema": {
+              "type": "number",
+              "format": "float"
+            },
+            "description": "Soft bias latitude (the map's centre)."
+          },
+          {
+            "in": "query",
+            "name": "bias_lon",
+            "schema": {
+              "type": "number",
+              "format": "float"
+            },
+            "description": "Soft bias longitude (the map's centre)."
+          },
+          {
+            "in": "query",
+            "name": "bias_scale",
+            "schema": {
+              "type": "number",
+              "format": "float"
+            },
+            "description": "Bias strength, 0.0-1.0."
+          },
           {
             "in": "query",
             "name": "lang",
@@ -101,6 +235,14 @@
             },
             "description": "Search query",
             "required": true
+          },
+          {
+            "in": "query",
+            "name": "zoom",
+            "schema": {
+              "type": "integer"
+            },
+            "description": "Map zoom the bias is scaled against."
           }
         ],
         "tags": [
@@ -121,7 +263,8 @@
                 "examples": {
                   "GeocodeResponse": {
                     "value": {
-                      "type": "FeatureCollection"
+                      "type": "FeatureCollection",
+                      "lang": "default"
                     }
                   }
                 }
@@ -135,7 +278,7 @@
     "/geo/api/v1/geocoding/structured": {
       "get": {
         "operationId": "geo_api_v1_geocoding_structured_retrieve",
-        "description": "Structured address search — search by address components.\n\n**Permissions:** `IsNotAnonymousUser`",
+        "description": "Structured address search — search by address components.",
         "summary": "Structured address search",
         "parameters": [
           {
@@ -199,7 +342,8 @@
                 "examples": {
                   "GeocodeResponse": {
                     "value": {
-                      "type": "FeatureCollection"
+                      "type": "FeatureCollection",
+                      "lang": "default"
                     }
                   }
                 }
@@ -700,6 +844,56 @@
         },
         "description": "**Permissions:** `ReadOnlyOrSuperUser`"
       }
+    },
+    "/geo/api/v1/map/config": {
+      "get": {
+        "operationId": "geo_api_v1_map_config_retrieve",
+        "description": "Basemap + picker configuration. Public: a map renders before login.\n\n**Permissions:** `AllowAny`",
+        "summary": "Basemap and location-picker configuration",
+        "tags": [
+          "Map"
+        ],
+        "security": [
+          {
+            "JWTCookieAuth": []
+          },
+          {}
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MapConfig"
+                },
+                "examples": {
+                  "MapConfig": {
+                    "value": {
+                      "default_zoom": 13,
+                      "picked_zoom": 17,
+                      "geolocation": true,
+                      "search_min_chars": 3,
+                      "search_debounce_ms": 350,
+                      "geohash_precision": 8,
+                      "default_center": [
+                        55.7558,
+                        37.6173
+                      ],
+                      "bbox": [
+                        19.6,
+                        41.2,
+                        190.0,
+                        81.9
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "description": ""
+          }
+        }
+      }
     }
   },
   "components": {
@@ -767,6 +961,12 @@
         "type": "object",
         "description": "Properties of a geocoded feature.",
         "properties": {
+          "formatted": {
+            "type": "string",
+            "nullable": true,
+            "description": "One-line human label built by STAPEL_GEO[\"ADDRESS_FORMATTER\"]",
+            "example": "Unter den Linden, 1, Berlin, Germany"
+          },
           "name": {
             "type": "string",
             "nullable": true,
@@ -883,6 +1083,12 @@
               "$ref": "#/components/schemas/GeocodeFeature"
             },
             "description": "List of geocoded features"
+          },
+          "lang": {
+            "type": "string",
+            "nullable": true,
+            "description": "Language actually asked of the provider after clamping (may differ from the requested one)",
+            "example": "default"
           }
         }
       },
@@ -1008,6 +1214,93 @@
           "uuid"
         ]
       },
+      "MapConfig": {
+        "type": "object",
+        "description": "Everything the default location picker needs before its first frame.",
+        "properties": {
+          "tiles": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/TileLayer"
+              }
+            ],
+            "description": "The basemap layer and its attribution obligations"
+          },
+          "default_zoom": {
+            "type": "integer",
+            "description": "Opening zoom level",
+            "example": 13
+          },
+          "picked_zoom": {
+            "type": "integer",
+            "description": "Zoom to settle on once a place has been chosen",
+            "example": 17
+          },
+          "geolocation": {
+            "type": "boolean",
+            "description": "Whether the skin should offer the browser's position prompt",
+            "example": true
+          },
+          "search_min_chars": {
+            "type": "integer",
+            "description": "Characters before search-as-you-type fires",
+            "example": 3
+          },
+          "search_debounce_ms": {
+            "type": "integer",
+            "description": "Idle time before a keystroke becomes a request",
+            "example": 350
+          },
+          "geohash_precision": {
+            "type": "integer",
+            "description": "Precision of the geohash the server stamps on a resolved point",
+            "example": 8
+          },
+          "endpoints": {
+            "type": "object",
+            "additionalProperties": {},
+            "description": "Absolute-from-mount paths of the verbs the picker calls"
+          },
+          "default_center": {
+            "type": "array",
+            "items": {
+              "type": "number",
+              "format": "double"
+            },
+            "nullable": true,
+            "description": "Opening centre as [lat, lon], or null for \"no opinion\"",
+            "example": [
+              55.7558,
+              37.6173
+            ]
+          },
+          "bbox": {
+            "type": "array",
+            "items": {
+              "type": "number",
+              "format": "double"
+            },
+            "nullable": true,
+            "description": "Operating area as [min_lon, min_lat, max_lon, max_lat], or null for worldwide",
+            "example": [
+              19.6,
+              41.2,
+              190.0,
+              81.9
+            ]
+          }
+        },
+        "required": [
+          "default_zoom",
+          "endpoints",
+          "geohash_precision",
+          "geolocation",
+          "picked_zoom",
+          "search_debounce_ms",
+          "search_min_chars",
+          "tiles"
+        ]
+      },
       "PatchedLocation": {
         "type": "object",
         "description": "Full Location representation — a flat point plus tree metadata.",
@@ -1064,6 +1357,174 @@
             "readOnly": true
           }
         }
+      },
+      "PlaceResolution": {
+        "type": "object",
+        "description": "Everything a location picker needs to CONFIRM one point, in one call.\n\nThe answer to \"the browser gave me a coordinate / the user dropped a\npin — now what do I show them?\". One round trip: reverse geocoding,\nthe display line, the address components, the alternatives to offer if\nthe top pick is wrong, the geohash to store, and (opt-in) the nearest\nknown locations from the tree.",
+        "properties": {
+          "lat": {
+            "type": "number",
+            "format": "double",
+            "description": "Latitude that was resolved (echoed, so the client can match the answer to its request)",
+            "example": 52.51667
+          },
+          "lon": {
+            "type": "number",
+            "format": "double",
+            "description": "Longitude that was resolved",
+            "example": 13.38333
+          },
+          "geohash": {
+            "type": "string",
+            "description": "Geohash of the point at STAPEL_GEO[\"GEOHASH_PRECISION\"] — what a consumer stores",
+            "example": "u33dc0cp"
+          },
+          "lang": {
+            "type": "string",
+            "nullable": true,
+            "description": "Language actually used upstream after clamping",
+            "example": "default"
+          },
+          "formatted": {
+            "type": "string",
+            "nullable": true,
+            "description": "One-line human label of the best candidate",
+            "example": "Unter den Linden, 1, Berlin, Germany"
+          },
+          "address": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/GeocodeProperties"
+              }
+            ],
+            "nullable": true,
+            "description": "Address components of the best candidate"
+          },
+          "feature": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/GeocodeFeature"
+              }
+            ],
+            "nullable": true,
+            "description": "The best candidate as a GeoJSON feature (its coordinates are the geocoder's snapped point, which may differ from lat/lon)"
+          },
+          "alternatives": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GeocodeFeature"
+            },
+            "description": "Further candidates, best-first, for a \"not this one?\" list"
+          },
+          "nearest": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PlaceSummary"
+            },
+            "description": "Known Location rows near the point (only when ``nearest`` was requested)"
+          }
+        },
+        "required": [
+          "geohash",
+          "lat",
+          "lon"
+        ]
+      },
+      "PlaceSummary": {
+        "type": "object",
+        "description": "A known ``Location`` row near a resolved point (reference data).",
+        "properties": {
+          "uuid": {
+            "type": "string",
+            "description": "Cross-service location UUID",
+            "example": "550e8400-e29b-41d4-a716-446655440000"
+          },
+          "name": {
+            "type": "string",
+            "nullable": true,
+            "description": "Location name",
+            "example": "Berlin"
+          },
+          "country": {
+            "type": "string",
+            "description": "Country name",
+            "example": "Germany"
+          },
+          "display_name": {
+            "type": "string",
+            "description": "Human label of the tree node",
+            "example": "Berlin (City in Germany)"
+          },
+          "distance_km": {
+            "type": "number",
+            "format": "double",
+            "nullable": true,
+            "description": "Great-circle distance from the resolved point",
+            "example": 1.42
+          }
+        },
+        "required": [
+          "uuid"
+        ]
+      },
+      "TileLayer": {
+        "type": "object",
+        "description": "The raster basemap a picker is allowed to draw.",
+        "properties": {
+          "url_template": {
+            "type": "string",
+            "description": "Tile URL with {z}/{x}/{y} (and optional {s}) placeholders",
+            "example": "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+          },
+          "attribution_html": {
+            "type": "string",
+            "description": "Credit line as HTML — a licence obligation, always render one",
+            "example": "&copy; OpenStreetMap contributors"
+          },
+          "attribution_text": {
+            "type": "string",
+            "description": "Same credit as plain text (canvas, print, native)",
+            "example": "© OpenStreetMap contributors"
+          },
+          "subdomains": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Shards for the {s} placeholder, empty when unused",
+            "example": [
+              "a",
+              "b",
+              "c"
+            ]
+          },
+          "policy_url": {
+            "type": "string",
+            "nullable": true,
+            "description": "The tile provider's usage policy",
+            "example": "https://operations.osmfoundation.org/policies/tiles/"
+          },
+          "requires_attribution": {
+            "type": "boolean",
+            "description": "Whether the credit line must be visible",
+            "example": true
+          },
+          "min_zoom": {
+            "type": "integer",
+            "description": "Lowest zoom level the layer serves",
+            "example": 2
+          },
+          "max_zoom": {
+            "type": "integer",
+            "description": "Highest zoom level the layer serves",
+            "example": 19
+          }
+        },
+        "required": [
+          "attribution_html",
+          "attribution_text",
+          "url_template"
+        ]
       },
       "ValidateUuidResponse": {
         "type": "object",

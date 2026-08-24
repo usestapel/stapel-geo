@@ -4,6 +4,131 @@ All notable changes to stapel-geo are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Pre-1.0 semver: **minor = breaking**, patch = compatible.
 
+## [0.4.0] — 2026-08-24
+
+### The defect: a location is chosen by a human, and this library shipped coordinates
+
+A live product's listing composer offered **two raw fields, `latitude`
+and `longitude`**. That is not a frontend oversight — it is the honest
+consequence of a geo library whose default surface was a geocoder proxy
+returning GeoJSON and nothing else. Choosing a place is a human act; a
+library that hands over a `FeatureCollection` and leaves the address
+line, the map, the position prompt and the confirmation step to each
+product has not shipped the feature, it has shipped the parts.
+
+0.4.0 is the server half of the picker. The React pair (`geo-react`,
+which does not exist yet) builds against `docs/frontend-contract.md`.
+
+### Fixed — `lang=ru` silently returned English addresses
+
+`PhotonGeocoder.resolve_language` clamped any language outside
+`PHOTON_LANGUAGES` to **`"en"`**. Photon does not degrade for an
+unindexed language — it answers HTTP 400 — so the clamp is necessary;
+clamping to English was the bug. The stock GraphHopper database carries
+`default, en, de, fr` and nothing else, so a Russian deployment asking
+for `lang=ru` received English street names, with **no error, no log
+line and nothing wrong-looking in the response**. Wrong data that looks
+right is worse than an outage.
+
+The clamp now lands on `PHOTON_LANGUAGE_FALLBACK`, whose default
+`"default"` is Photon's *local-name* mode: it returns the name as
+written on the map — "Тверская улица" in Russia, "Hauptstraße" in
+Germany. That is never worse than English and is exactly right for a
+monolingual product. A regional tag is also retried on its base subtag
+first (`ru-RU` → `ru`, `de-AT` → `de`), which an `Accept-Language`
+header needs and the old code never did.
+
+The clamp is no longer invisible either: **every response carries
+`lang`**, the language actually asked of the upstream. Send `ru`, get
+back `"lang": "default"`, and you can see what happened.
+
+**Verdict on the deployment question: this was a call-site defect AND a
+data-set fact, in that order.** The library was clamping to the wrong
+value (fixed here, no redeploy needed). Making `ru` a *real* indexed
+language is separate and larger: it requires building the Photon
+database from the JSON dump with `java -jar photon.jar import -languages
+ru,en …` instead of using the prebuilt one. Adding `"ru"` to
+`PHOTON_LANGUAGES` **without** rebuilding the index turns every request
+into a 502 — so `checks.W005`/`W006` now say all of this at deploy time,
+with the exact command.
+
+### Added — the picker's server half
+
+- **`GET /geo/api/v1/geocoding/resolve`** and
+  `geocoding.service.resolve_point()` — one coordinate pair in, one
+  **confirmable place** out: the display line, the address components,
+  the geohash to store, the runner-up candidates, and (opt-in via
+  `?nearest=N`) the nearest known `Location` rows. This is the whole
+  server side of "detect my position" and of a dropped map pin: one
+  round trip, not three. An empty answer is an answer — the middle of a
+  lake has coordinates too, and the picker shows "no address here", not
+  a failure.
+- **`properties.formatted` on every feature** — the one-line human label,
+  assembled in the country's own postal order (`Тверская улица, 7` in
+  Russia, `7 Tverskaya Street` in the US, per
+  `ADDRESS_HOUSENUMBER_FIRST_COUNTRIES`), with a place name dropped when
+  it merely repeats the city. Swappable fleet-wide via
+  `ADDRESS_FORMATTER`. Every product was reassembling this by hand, each
+  one differently, each one anglocentric.
+- **`GET /geo/api/v1/map/config`** (public) and `basemap.build_map_config()`
+  — tile template, **the attribution the ODbL licence obliges the map to
+  display** (HTML and plain text, flagged `requires_attribution`), the
+  zoom envelope, the operating bbox, the search-as-you-type discipline,
+  the geohash precision, and the endpoint paths. It is unauthenticated
+  because a map that cannot render until the visitor logs in is not a
+  map. `checks.W007` refuses to let the OSM Foundation's public tile
+  server reach production unnoticed.
+- **Map-shaped narrowings on forward geocoding**, first-class on the
+  facade rather than provider-specific spellings: `bbox` (hard — nothing
+  outside the rectangle) and `bias_lat`/`bias_lon`/`bias_scale`/`zoom`
+  (soft — near results rank higher). Until now `lat`/`lon` were stripped
+  from a search request as "proxy-consumed", so a viewport-biased search
+  was not expressible at all. An absent `bbox` inherits `MAP_BBOX`, so
+  a country-scoped product is scoped without every caller remembering.
+  A malformed explicit `bbox` is a **400**, not a silent widening.
+- **`GEOCODER_PERMISSIONS`** — the proxy's guard is now a settings seam.
+  The default is unchanged (authenticated only: geocoding burns a
+  metered upstream), but a storefront that needs address search on a
+  public page opens it from settings instead of subclassing four views,
+  and **`GEOCODER_ANON_THROTTLE`** (default `10/min`) ships as the brake
+  that then matters.
+- **comm Functions `geo.geocode`, `geo.reverse_geocode`, `geo.map_config`**
+  — the geocoding half of the surface was HTTP-only, so a module that
+  wanted to stamp an address onto a coordinate had to import `stapel_geo`
+  (this module's own first anti-pattern) or call itself over HTTP.
+- **Flow `geo.pick_location`** — the human act, as a flow.
+- `reverse` gained `radius_km`; Photon's upstream error **body** now
+  survives into the `GeocoderError` message, so a misconfiguration is
+  distinguishable from an outage in the logs.
+- `docs/frontend-contract.md` — the contract `geo-react` builds against:
+  endpoints, payloads, error shapes, the GeoJSON `[lon, lat]` trap, the
+  language rule, and what the frontend still owns.
+
+### Changed
+
+- **`stapel-core` floor raised to `>=0.41.0`.** Core 0.41.0 hoisted
+  `SerializerSeamMixin` / `StapelAPIView` into
+  `stapel_core.django.api.views`; the geocoder views now inherit the
+  canon and `stapel_geo.seams` is a re-export of it rather than a
+  twenty-fifth local copy. The name stays exported — host code
+  subclasses against it.
+- `GeocodeProperties` gained `formatted`; `GeocodeResponse` gained
+  `lang`. Both are additive, and `response_from_json` now ignores keys it
+  does not know, so a 30-day `GeocodeCache` written by 0.3.x does not
+  have to be flushed.
+- `PHOTON_LANGUAGES`' documentation, everywhere it appears, now says what
+  it actually is: a statement of fact about the Lucene index on disk, not
+  a preference list.
+
+### Compatibility
+
+Additive for callers. Two behaviour changes to know about: a request for
+an unindexed language returns local names instead of English (the fix),
+and a **malformed** explicit `bbox` is now refused instead of ignored —
+it never worked before, so nothing that worked stops working. Existing
+`search`/`structured`/`reverse` payloads gain fields, lose none. No
+migration.
+
 ## [0.3.6] — 2026-08-15
 
 ### Changed — `stapel-core` floor raised to 0.26.0

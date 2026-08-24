@@ -38,16 +38,32 @@ def response_to_json(response: GeocodeResponse) -> dict:
 
 
 def response_from_json(data: dict) -> GeocodeResponse:
-    """Rebuild the normalized DTO from a ledger row's JSON column."""
+    """Rebuild the normalized DTO from a ledger row's JSON column.
+
+    Tolerant of rows written by an older version of this module: unknown
+    keys are dropped and absent ones take their dataclass default, so a
+    30-day cache does not have to be flushed when a field is added.
+    """
+    known = set(GeocodeProperties.__dataclass_fields__)
     features = [
         GeocodeFeature(
             type=raw.get("type", "Feature"),
             geometry=GeocodeGeometry(**(raw.get("geometry") or {"type": "Point", "coordinates": []})),
-            properties=GeocodeProperties(**(raw.get("properties") or {})),
+            properties=GeocodeProperties(
+                **{
+                    key: value
+                    for key, value in (raw.get("properties") or {}).items()
+                    if key in known
+                }
+            ),
         )
         for raw in data.get("features", [])
     ]
-    return GeocodeResponse(type=data.get("type", "FeatureCollection"), features=features)
+    return GeocodeResponse(
+        type=data.get("type", "FeatureCollection"),
+        features=features,
+        lang=data.get("lang"),
+    )
 
 
 class GeocodeCachePolicy(ABC):

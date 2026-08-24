@@ -10,7 +10,14 @@ in Django or a configured settings module):
   ``NominatimGeocoder`` — the geocoder seam.
 - ``register_geocoder`` / ``registered_geocoders`` — the provider
   merge-registry.
-- ``GeocodeResponse`` — normalized GeoJSON geocoding result.
+- ``GeocodeResponse`` / ``PlaceResolution`` — normalized GeoJSON
+  geocoding result, and the one-call "coordinate -> confirmable place"
+  answer a location picker renders.
+- ``resolve_point`` — that one call.
+- ``format_address`` — the shipped human display line (seam:
+  ``STAPEL_GEO["ADDRESS_FORMATTER"]``).
+- ``build_map_config`` — the basemap + picker configuration, including
+  the attribution the tile licence obliges a map to display.
 - ``GeocodeCachePolicy`` — the geocode-cache seam.
 
 The models (``Location``, ``GeocodeCache``) live in ``stapel_geo.models``
@@ -25,12 +32,16 @@ __all__ = [
     "GeocoderError",
     "NominatimGeocoder",
     "PhotonGeocoder",
+    "PlaceResolution",
     "PostgresGeoSearchBackend",
     "RedisGeoSearchBackend",
+    "build_map_config",
+    "format_address",
     "geo_settings",
     "get_backend",
     "register_geocoder",
     "registered_geocoders",
+    "resolve_point",
 ]
 
 # name -> submodule that defines it. Resolution is deferred until first
@@ -48,6 +59,10 @@ _LAZY_EXPORTS = {
     "register_geocoder": ".geocoding.providers",
     "registered_geocoders": ".geocoding.providers",
     "GeocodeResponse": ".geocoding.dto",
+    "PlaceResolution": ".geocoding.dto",
+    "resolve_point": ".geocoding.service",
+    "format_address": ".geocoding.format",
+    "build_map_config": ".basemap",
     "GeocodeCachePolicy": ".geocoding.cache",
 }
 

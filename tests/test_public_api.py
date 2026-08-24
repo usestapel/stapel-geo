@@ -16,12 +16,16 @@ class TestLazyExports:
             "GeocoderError",
             "NominatimGeocoder",
             "PhotonGeocoder",
+            "PlaceResolution",
             "PostgresGeoSearchBackend",
             "RedisGeoSearchBackend",
+            "build_map_config",
+            "format_address",
             "geo_settings",
             "get_backend",
             "register_geocoder",
             "registered_geocoders",
+            "resolve_point",
         ]
 
     def test_settings_resolve(self):
@@ -45,6 +49,15 @@ class TestLazyExports:
         assert stapel_geo.get_backend is get_backend
         assert stapel_geo.PostgresGeoSearchBackend is PostgresGeoSearchBackend
         assert stapel_geo.RedisGeoSearchBackend is RedisGeoSearchBackend
+
+    def test_picker_surface_exports_resolve(self):
+        from stapel_geo.basemap import build_map_config
+        from stapel_geo.geocoding.format import format_address
+        from stapel_geo.geocoding.service import resolve_point
+
+        assert stapel_geo.resolve_point is resolve_point
+        assert stapel_geo.format_address is format_address
+        assert stapel_geo.build_map_config is build_map_config
 
     def test_unknown_attribute_raises(self):
         try:

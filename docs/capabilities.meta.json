@@ -6,6 +6,8 @@
     {"select": "functions", "path": "services.py"},
     {"select": "functions", "path": "geocoding/service.py"},
     {"select": "functions", "path": "geocoding/providers.py"},
+    {"select": "functions", "path": "geocoding/format.py"},
+    {"select": "functions", "path": "basemap.py"},
     {"select": "functions", "path": "search/__init__.py"}
   ],
 
@@ -78,6 +80,33 @@
       "instead_of": [
         "calling a Geocoder provider's search/reverse/structured directly, bypassing the cache and the spend ledger"
       ]
+    },
+    "resolve_point": {
+      "kind": "gate_function",
+      "intent": "Turn one coordinate pair into a CONFIRMABLE place in a single round trip: the display line, the address components, the geohash to store, the runner-up candidates, and optionally the nearest known Location rows. This is the server half of 'detect my position' and of a dropped map pin. Call this instead of chaining geocode('reverse') + your own label assembly + your own geohash call — that chain is exactly what every product was rebuilding.",
+      "instead_of": [
+        "geocode('reverse') followed by hand-assembled address text and a separate geohash call",
+        "a composer that just stores raw latitude/longitude and never resolves an address"
+      ]
+    },
+    "format_address": {
+      "kind": "gate_function",
+      "intent": "Build the one-line human label for a geocoded place from its components, in the country's own postal order (house number before or after the street). Already applied to every feature this library returns as properties.formatted — call it directly only when you hold GeocodeProperties you assembled yourself, and override it fleet-wide via STAPEL_GEO['ADDRESS_FORMATTER'] rather than reformatting per product.",
+      "instead_of": [
+        "each product joining name/street/housenumber/city/country its own way"
+      ]
+    },
+    "street_line": {
+      "kind": "gate_function",
+      "intent": "Just the street half of an address — street and house number joined in the order that country writes them ('7 Tverskaya Street' vs 'Тверская улица, 7'). Reach for this when you render address components in your own layout and only need the one line the anglocentric default gets backwards."
+    },
+    "apply_formatter": {
+      "kind": "gate_function",
+      "intent": "Stamp properties.formatted on a GeocodeProperties using the configured ADDRESS_FORMATTER, swallowing a formatter's exception into a null label. A custom Geocoder implementation calls this on every feature it maps, so third-party providers carry the same display line as the built-in ones."
+    },
+    "build_map_config": {
+      "kind": "factory",
+      "intent": "Assemble the location picker's configuration from STAPEL_GEO — tile template, the attribution the ODbL licence obliges the map to display, the zoom envelope, the operating bbox, the search-as-you-type discipline. Reach for this in a server-rendered host instead of reading the MAP_* settings one by one, so the page and the geo-react picker cannot disagree about what the map is allowed to do."
     },
     "register_geocoder": {
       "kind": "factory",

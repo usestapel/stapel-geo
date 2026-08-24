@@ -11,13 +11,32 @@ from stapel_geo.geocoding.dto import (
     GeocodeProperties,
     GeocodeResponse,
 )
+from stapel_geo.geocoding.format import apply_formatter
 
 
 def _feature(name: str, lon: float, lat: float) -> GeocodeFeature:
+    """A feature shaped like a real provider's — display line included.
+
+    ``apply_formatter`` is part of the provider contract, not of the
+    built-ins: a third-party ``Geocoder`` that skips it returns features
+    with no ``properties.formatted``, and a picker built on the default
+    contract shows blank rows. The fakes call it so the tests exercise
+    the same shape the real providers emit.
+    """
+    properties = apply_formatter(
+        GeocodeProperties(
+            name=name,
+            country="Testland",
+            countrycode="TL",
+            city="Testville",
+            street="Test Street",
+            housenumber="7",
+        )
+    )
     return GeocodeFeature(
         type="Feature",
         geometry=GeocodeGeometry(type="Point", coordinates=[lon, lat]),
-        properties=GeocodeProperties(name=name, country="Testland", countrycode="TL"),
+        properties=properties,
     )
 
 
@@ -60,6 +79,31 @@ class FailingGeocoder(Geocoder):
 
     def structured(self, *, lang=None, limit=None, **params):
         raise GeocoderError("boom")
+
+
+class EmptyGeocoder(Geocoder):
+    """Answers with no features — the middle of the sea, not a failure."""
+
+    name = "empty"
+
+    def search(self, query, *, lang=None, limit=None, **params):
+        return GeocodeResponse()
+
+    def reverse(self, lat, lng, *, lang=None, limit=None, **params):
+        return GeocodeResponse()
+
+    def structured(self, *, lang=None, limit=None, **params):
+        return GeocodeResponse()
+
+
+def shouty_formatter(props) -> str:
+    """A host's own ADDRESS_FORMATTER (the settings seam)."""
+    return (props.city or "").upper()
+
+
+def exploding_formatter(props) -> str:
+    """A formatter that raises — the label is lost, the result is not."""
+    raise RuntimeError("boom")
 
 
 class NotAGeocoder:

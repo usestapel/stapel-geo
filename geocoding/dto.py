@@ -44,7 +44,9 @@ class GeocodeProperties:
         housenumber: House number. Example: 1
         postcode: Postal code. Example: 10117
         extent: Bounding box [minLon, minLat, maxLon, maxLat]. Example: [13.08, 52.33, 13.76, 52.68]
+        formatted: One-line human label built by STAPEL_GEO["ADDRESS_FORMATTER"]. Example: Unter den Linden, 1, Berlin, Germany
     """
+    formatted: Optional[str] = None
     name: Optional[str] = None
     country: Optional[str] = None
     countrycode: Optional[str] = None
@@ -95,9 +97,61 @@ class GeocodeResponse:
     Attributes:
         type: GeoJSON type. Example: FeatureCollection
         features: List of geocoded features.
+        lang: Language actually asked of the provider after clamping (may differ from the requested one). Example: default
     """
     type: str = "FeatureCollection"
     features: list[GeocodeFeature] = field(default_factory=list)
+    lang: Optional[str] = None
+
+
+@dataclass
+class PlaceSummary:
+    """A known ``Location`` row near a resolved point (reference data).
+
+    Attributes:
+        uuid: Cross-service location UUID. Example: 550e8400-e29b-41d4-a716-446655440000
+        name: Location name. Example: Berlin
+        country: Country name. Example: Germany
+        display_name: Human label of the tree node. Example: Berlin (City in Germany)
+        distance_km: Great-circle distance from the resolved point. Example: 1.42
+    """
+    uuid: str
+    name: Optional[str] = None
+    country: str = ""
+    display_name: str = ""
+    distance_km: Optional[float] = None
+
+
+@dataclass
+class PlaceResolution:
+    """Everything a location picker needs to CONFIRM one point, in one call.
+
+    The answer to "the browser gave me a coordinate / the user dropped a
+    pin — now what do I show them?". One round trip: reverse geocoding,
+    the display line, the address components, the alternatives to offer if
+    the top pick is wrong, the geohash to store, and (opt-in) the nearest
+    known locations from the tree.
+
+    Attributes:
+        lat: Latitude that was resolved (echoed, so the client can match the answer to its request). Example: 52.51667
+        lon: Longitude that was resolved. Example: 13.38333
+        geohash: Geohash of the point at STAPEL_GEO["GEOHASH_PRECISION"] — what a consumer stores. Example: u33dc0cp
+        lang: Language actually used upstream after clamping. Example: default
+        formatted: One-line human label of the best candidate. Example: Unter den Linden, 1, Berlin, Germany
+        address: Address components of the best candidate.
+        feature: The best candidate as a GeoJSON feature (its coordinates are the geocoder's snapped point, which may differ from lat/lon).
+        alternatives: Further candidates, best-first, for a "not this one?" list.
+        nearest: Known Location rows near the point (only when ``nearest`` was requested).
+    """
+    lat: float
+    lon: float
+    geohash: str
+    lang: Optional[str] = None
+    formatted: Optional[str] = None
+    address: Optional[GeocodeProperties] = None
+    feature: Optional[GeocodeFeature] = None
+    alternatives: list[GeocodeFeature] = field(default_factory=list)
+    nearest: list[PlaceSummary] = field(default_factory=list)
 
 
 __all__ = [
@@ -106,4 +160,6 @@ __all__ = [
     "GeocodeGeometry",
     "GeocodeFeature",
     "GeocodeResponse",
+    "PlaceSummary",
+    "PlaceResolution",
 ]

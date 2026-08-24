@@ -57,9 +57,20 @@ class Geocoder(ABC):
     ) -> GeocodeResponse:
         """Forward geocoding: free-text *query* -> matching places.
 
-        ``params`` carries provider-specific extras (bias coordinates,
-        bounding box, OSM tag filters, ...); unknown keys are ignored by
-        providers that do not understand them.
+        Two narrowings are part of the FACADE (a map picker needs both, so
+        they must not be provider-specific spellings), both optional:
+
+        - ``bbox`` — ``[min_lon, min_lat, max_lon, max_lat]`` (or the same
+          as a comma-joined string). A **hard** restriction: nothing
+          outside the rectangle comes back.
+        - ``bias_lat`` / ``bias_lon`` (+ ``bias_scale`` 0.0-1.0, ``zoom``)
+          — a **soft** one: near results rank higher, far ones survive.
+          A provider without a soft bias accepts and ignores these rather
+          than silently promoting them to a hard filter.
+
+        ``params`` carries anything further that is provider-specific (OSM
+        tag filters, layers, ...); unknown keys are ignored by providers
+        that do not understand them.
         """
 
     @abstractmethod
@@ -72,7 +83,11 @@ class Geocoder(ABC):
         limit: int | None = None,
         **params,
     ) -> GeocodeResponse:
-        """Reverse geocoding: coordinates -> nearest place(s)."""
+        """Reverse geocoding: coordinates -> nearest place(s).
+
+        ``radius_km`` (optional, facade-level) caps how far the provider
+        may look for a match. Providers without the notion ignore it.
+        """
 
     @abstractmethod
     def structured(

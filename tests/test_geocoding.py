@@ -126,11 +126,46 @@ class TestRegistry:
 
 
 class TestPhotonLanguageResolution:
+    """The clamp, and the bug it replaced.
+
+    Photon answers HTTP 400 for a language its index was not built with,
+    so the clamp is mandatory. Until 0.4.0 it clamped to ``"en"``, which
+    meant a Russian product asking for ``lang=ru`` against a stock
+    GraphHopper dump silently received English street names — the wrong
+    answer with no error anywhere.
+    """
+
     def test_supported_language_passes_through(self):
         assert PhotonGeocoder().resolve_language("de") == "de"
 
-    def test_unsupported_language_falls_back_to_english(self):
-        assert PhotonGeocoder().resolve_language("xx") == "en"
+    def test_unsupported_language_falls_back_to_local_names(self):
+        # "default" is Photon's local-name mode: Russian in Russia.
+        assert PhotonGeocoder().resolve_language("xx") == "default"
+
+    def test_russian_no_longer_silently_becomes_english(self):
+        """The regression guard for the reported defect."""
+        assert PhotonGeocoder().resolve_language("ru") != "en"
+        assert PhotonGeocoder().resolve_language("ru") == "default"
+
+    def test_regional_tag_matches_on_its_base_subtag(self):
+        # Accept-Language headers are regional; "de-AT" must find "de"
+        # rather than falling all the way through to the fallback.
+        assert PhotonGeocoder().resolve_language("de-AT") == "de"
+        assert PhotonGeocoder().resolve_language("de_AT") == "de"
+
+    @override_settings(
+        STAPEL_GEO={"PHOTON_LANGUAGES": ["default", "en", "ru"]}
+    )
+    def test_a_language_the_index_carries_is_forwarded(self):
+        # An index built with `photon.jar import -languages ru,en` is
+        # declared here, and then "ru" stops being clamped at all.
+        assert PhotonGeocoder().resolve_language("ru") == "ru"
+        assert PhotonGeocoder().resolve_language("ru-RU") == "ru"
+
+    @override_settings(STAPEL_GEO={"PHOTON_LANGUAGE_FALLBACK": None})
+    def test_fallback_can_be_disabled(self):
+        # None forwards nothing, so Photon applies its own default.
+        assert PhotonGeocoder().resolve_language("xx") is None
 
     def test_none_passes_through(self):
         assert PhotonGeocoder().resolve_language(None) is None

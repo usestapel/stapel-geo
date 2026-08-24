@@ -9,13 +9,28 @@
   (correct across the equator, the antimeridian and the poles, ranked by
   exact haversine); a Redis `GEOSEARCH` side-index backend ships for the
   hot set; Elasticsearch/Solr are named stubs.
-- **Geocoder proxy** — forward / structured / reverse geocoding behind a
+- **Geocoder proxy** — forward / structured / reverse / resolve behind a
   provider merge-registry (`photon` self-hosted default, `nominatim`
   keyless dev/fallback, `google`/`yandex` key-gated stubs), throttled,
-  cached (30-day TTL) and spend-ledgered per call.
+  cached (30-day TTL) and spend-ledgered per call. Forward search takes
+  the map's own narrowings: a hard `bbox` and a soft viewport bias.
+- **The location picker's server half** — because a place is chosen by a
+  *human*, not typed as two decimals:
+  - every feature carries `properties.formatted`, the display line, in
+    the country's own postal order;
+  - `geocoding/resolve?lat=&lon=` turns one coordinate pair into a
+    **confirmable place** (label, components, geohash, alternatives) in
+    one round trip — the whole server side of "detect my position" and
+    of a dropped map pin;
+  - `map/config` (public) hands the frontend its tile template, **the
+    attribution the ODbL licence obliges the map to display**, the zoom
+    envelope, the operating bbox and the debounce discipline.
+
+  The React pair builds against `docs/frontend-contract.md`.
 - **comm surface** — `geo.nearby` / `geo.radius` / `geo.bbox` /
-  `geo.geohash_encode` / `geo.resolve`: consumers (listings, calendar)
-  query geo by name, never importing it.
+  `geo.geohash_encode` / `geo.resolve` / `geo.geocode` /
+  `geo.reverse_geocode` / `geo.map_config`: consumers (listings,
+  calendar) query geo by name, never importing it.
 
 ## Quick start
 
@@ -48,9 +63,11 @@ Plain `manage.py migrate` — any Django database backend works.
 | `locations/nearby-by-coords/?lat=&lon=` | Top-K nearest (exact `distance_km`) |
 | `locations/nearby-by-geohash/?geohash=` | Same, geohash input |
 | `locations/validate-uuid/{uuid}/` | Cross-service reference check |
-| `geocoding/search?q=` | Forward geocoding (JWT + throttle) |
+| `geocoding/search?q=` | Forward geocoding, `?bbox=` + `?bias_lat=&bias_lon=` (guarded + throttled) |
 | `geocoding/structured?city=&street=` | Structured address search |
-| `geocoding/reverse?lat=&lon=` | Reverse geocoding |
+| `geocoding/reverse?lat=&lon=` | Reverse geocoding (raw candidates) |
+| `geocoding/resolve?lat=&lon=` | **One coordinate pair → one confirmable place** |
+| `map/config` | Basemap + picker configuration (**public**) |
 
 ## Settings (`STAPEL_GEO`)
 
@@ -63,12 +80,30 @@ Plain `manage.py migrate` — any Django database backend works.
 | `NEARBY_LIMIT` / `NEARBY_MAX_LIMIT` | `10` / `50` | Default / max search results. |
 | `GEOCODER` | `"photon"` | Default geocoder **name** (registry key). |
 | `GEOCODERS` | `{}` | Extra providers, merged over the built-ins (`None` removes). |
-| `PHOTON_URL` / `PHOTON_LANGUAGES` | `http://localhost:2322` / `[default,en,de,fr]` | Photon provider knobs. |
+| `PHOTON_URL` | `http://localhost:2322` | Photon instance the default provider proxies. |
+| `PHOTON_LANGUAGES` | `[default,en,de,fr]` | What the Photon index **actually carries** — not a preference list. Photon 400s on anything else. |
+| `PHOTON_LANGUAGE_FALLBACK` | `"default"` | Where an unindexed language clamps. `default` = Photon's local-name mode (Russian in Russia). |
 | `NOMINATIM_URL` | `https://nominatim.openstreetmap.org` | Nominatim base (public: 1 rps, dev/fallback). |
 | `GEOCODER_TIMEOUT` | `10` | Geocoder HTTP timeout (s). |
-| `GEOCODER_THROTTLE` | `30/min` | DRF scoped throttle rate for the proxy. |
+| `GEOCODER_THROTTLE` / `GEOCODER_ANON_THROTTLE` | `30/min` / `10/min` | Scoped throttle rates (identified / anonymous). |
+| `GEOCODER_PERMISSIONS` | `[IsNotAnonymousUser]` | Guard of the proxy verbs. Set to `AllowAny` for a public address search. |
 | `GEOCODE_CACHE_POLICY` | `…geocoding.cache.LedgerCachePolicy` | Cache seam (dotted path). |
 | `GEOCODE_CACHE_TTL_DAYS` | `30` | Default cache TTL. |
+| `ADDRESS_FORMATTER` | `…geocoding.format.format_address` | Builds `properties.formatted` (seam). |
+| `MAP_TILE_URL` / `MAP_TILE_ATTRIBUTION_*` | OSM public tiles / OSM credit | Basemap and its **mandatory** attribution. The default tile server is a dev default (`W007`). |
+| `MAP_BBOX` | `None` | The product's operating area; also the default hard restriction on forward geocoding. |
+| `MAP_*` (zoom, centre, debounce) | see `CONFIG.MD` | The rest of the picker's configuration. |
+
+> **Sending `lang`?** Send `default`, or nothing. `PHOTON_LANGUAGES` is
+> what the index on disk carries, and Photon refuses anything else with
+> HTTP 400 rather than degrading. Requests for an unindexed language
+> clamp to `PHOTON_LANGUAGE_FALLBACK` (`"default"` = the local name on
+> the map, which for a single-country product is already the right
+> language), and the response's `lang` field tells you what was really
+> used. To index another language for real, build the Photon database
+> from the JSON dump with `photon.jar import -languages …`; listing it
+> here **without** rebuilding turns every request into a 502.
+> `manage.py check` says all of this (`stapel_geo.W005`/`W006`).
 
 ## comm Functions
 

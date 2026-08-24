@@ -2,7 +2,12 @@
 (W-level — degradable)."""
 from django.test import override_settings
 
-from stapel_geo.checks import check_geocoder, check_search_backend
+from stapel_geo.checks import (
+    check_basemap,
+    check_geocoder,
+    check_geocoder_languages,
+    check_search_backend,
+)
 
 
 class TestGeocoderCheck:
@@ -56,3 +61,65 @@ class TestSearchBackendCheck:
         result = check_search_backend(None)
         assert len(result) == 1
         assert result[0].id == "stapel_geo.W004"
+
+
+class TestGeocoderLanguageCheck:
+    """W005/W006 — the deploy-time half of the "asked ru, got en" defect.
+
+    The library cannot make Photon's index carry a language it was not
+    built with. What it CAN do is stop that fact from being invisible:
+    the clamp is silent by nature, so the checks say it out loud once,
+    at deploy, with the exact command that fixes it.
+    """
+
+    def test_stock_english_site_on_stock_dump_is_quiet(self):
+        # LANGUAGE_CODE defaults to en-us and "en" IS in the prebuilt
+        # dumps — no warning, or the check would be noise everywhere.
+        assert check_geocoder_languages(None) == []
+
+    @override_settings(LANGUAGE_CODE="ru-ru")
+    def test_a_russian_site_on_a_stock_dump_warns_w006(self):
+        result = check_geocoder_languages(None)
+        assert [warning.id for warning in result] == ["stapel_geo.W006"]
+        # The remediation must be actionable, not "check your config".
+        assert "-languages ru" in result[0].hint
+
+    @override_settings(
+        LANGUAGE_CODE="ru-ru",
+        STAPEL_GEO={"PHOTON_LANGUAGES": ["default", "en", "ru"]},
+    )
+    def test_an_index_that_carries_the_language_is_quiet(self):
+        assert check_geocoder_languages(None) == []
+
+    @override_settings(STAPEL_GEO={"PHOTON_LANGUAGE_FALLBACK": "ru"})
+    def test_a_fallback_the_index_lacks_warns_w005(self):
+        # Clamping to a language Photon rejects turns every unsupported
+        # request into a 502 instead of a degraded answer.
+        result = check_geocoder_languages(None)
+        assert "stapel_geo.W005" in [warning.id for warning in result]
+
+    @override_settings(
+        STAPEL_GEO={"GEOCODERS": {"fake": "stapel_geo.tests.fakes.FakeGeocoder"},
+                    "GEOCODER": "fake"},
+        LANGUAGE_CODE="ru-ru",
+    )
+    def test_a_non_photon_provider_is_not_lectured_about_photon(self):
+        assert check_geocoder_languages(None) == []
+
+
+class TestBasemapCheck:
+    def test_debug_deployments_may_use_the_public_tiles(self):
+        with override_settings(DEBUG=True):
+            assert check_basemap(None) == []
+
+    def test_public_osm_tiles_in_production_warn_w007(self):
+        with override_settings(DEBUG=False):
+            result = check_basemap(None)
+        assert [warning.id for warning in result] == ["stapel_geo.W007"]
+
+    @override_settings(
+        DEBUG=False,
+        STAPEL_GEO={"MAP_TILE_URL": "https://tiles.example.com/{z}/{x}/{y}.png"},
+    )
+    def test_an_own_tile_server_is_quiet(self):
+        assert check_basemap(None) == []

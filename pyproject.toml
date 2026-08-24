@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "stapel-geo"
-version = "0.3.6"
+version = "0.4.0"
 description = "Geohash proximity search and geocoding for the Stapel framework — no GDAL, no PostGIS"
 readme = "README.md"
 license = { text = "MIT" }
@@ -24,9 +24,10 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
-    # Floor: 0.26.0 emits docs/errors.json with the `owner` field the
-    # committed artifact and its drift gate require.
-    "stapel-core>=0.26.0,<1.0",
+    # Floor: 0.41.0 hoisted SerializerSeamMixin/StapelAPIView into
+    # stapel_core.django.api.views, which this module's views now inherit
+    # instead of re-declaring a local seam (seams.py re-exports the canon).
+    "stapel-core>=0.41.0,<1.0",
     "django-treenode>=0.20",
     "pygeohash>=2",
     "requests>=2.28",
@@ -62,6 +63,7 @@ stapel_geo = [
     "docs/capabilities.json", "docs/llms.txt",
     "docs/flows.json",
     "docs/errors.json",
+    "docs/frontend-contract.md",
     "CONFIG.MD",
 ]
 

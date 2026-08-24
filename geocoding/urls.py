@@ -7,10 +7,16 @@ standalone when only the geocoder proxy is wanted::
 """
 from django.urls import path
 
-from .views import GeocodeReverseView, GeocodeSearchView, GeocodeStructuredView
+from .views import (
+    GeocodeResolveView,
+    GeocodeReverseView,
+    GeocodeSearchView,
+    GeocodeStructuredView,
+)
 
 urlpatterns = [
     path("search", GeocodeSearchView.as_view(), name="geocode-search"),
     path("structured", GeocodeStructuredView.as_view(), name="geocode-structured"),
     path("reverse", GeocodeReverseView.as_view(), name="geocode-reverse"),
+    path("resolve", GeocodeResolveView.as_view(), name="geocode-resolve"),
 ]

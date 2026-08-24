@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "geo.geocode",
+  "description": "Forward geocoding: address text -> normalized places. Returns the GeoJSON FeatureCollection dict {\"type\", \"features\", \"lang\"}; each feature's properties.formatted is the ready-to-display one-line label. Goes through the same cache + spend ledger as the HTTP proxy. Raises GeocoderError when the provider is unreachable (an empty features list means 'no match', not 'down').",
+  "type": "object",
+  "properties": {
+    "q": {"type": "string", "minLength": 1, "description": "Free-text address or place query."},
+    "lang": {"type": "string", "description": "Requested language; clamped to what the provider's index actually carries (see PHOTON_LANGUAGES / PHOTON_LANGUAGE_FALLBACK). The language actually used comes back as \"lang\"."},
+    "limit": {"type": "integer", "minimum": 1, "maximum": 50, "description": "Maximum number of results."},
+    "bbox": {
+      "type": "array",
+      "items": {"type": "number"},
+      "minItems": 4,
+      "maxItems": 4,
+      "description": "Hard restriction [min_lon, min_lat, max_lon, max_lat]; defaults to STAPEL_GEO['MAP_BBOX'] at the HTTP layer only."
+    },
+    "bias_lat": {"type": "number", "minimum": -90, "maximum": 90, "description": "Soft bias latitude (the map's centre)."},
+    "bias_lon": {"type": "number", "minimum": -180, "maximum": 180, "description": "Soft bias longitude (the map's centre)."}
+  },
+  "required": ["q"],
+  "additionalProperties": false
+}

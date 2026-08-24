@@ -20,7 +20,7 @@ from ..conf import geo_settings
 from ..models import GeocodeCache
 from .base import Geocoder, GeocoderError
 from .cache import query_hash, write_ledger
-from .dto import GeocodeResponse
+from .dto import GeocodeResponse, PlaceResolution, PlaceSummary
 from .providers import registered_geocoders
 
 
@@ -118,4 +118,70 @@ def geocode(verb: str, *, lang: str | None = None, **kwargs) -> GeocodeResponse:
     return response
 
 
-__all__ = ["get_geocoder", "geocode"]
+def resolve_point(
+    lat: float,
+    lon: float,
+    *,
+    lang: str | None = None,
+    limit: int | None = None,
+    nearest: int = 0,
+    **params,
+) -> PlaceResolution:
+    """Turn one coordinate pair into a confirmable place, in one round trip.
+
+    This is the server half of "detect my position" and of "the user
+    dropped a pin": the browser (or the map) produces a coordinate, and
+    the UI needs, all at once, the address to show, the components to
+    store, the geohash to index by, and something to offer when the top
+    guess is wrong. Three separate calls for that is how a location
+    picker ends up being rebuilt in every product.
+
+    *nearest* (0 = off, clamped to ``RESOLVE_NEAREST_MAX``) additionally
+    asks the location tree which known places are closest — only useful
+    when the host actually populates ``Location``, so it is opt-in and
+    costs no query at 0.
+
+    Raises :class:`GeocoderError` exactly like :func:`geocode`; an EMPTY
+    result is not an error — the sea has coordinates too, and the picker
+    shows "no address here" rather than a failure.
+    """
+    from .. import geohash as geohash_utils
+
+    if limit is None:
+        limit = geo_settings.RESOLVE_CANDIDATES
+    response = geocode("reverse", lat=lat, lng=lon, lang=lang, limit=limit, **params)
+    features = list(response.features)
+    best = features[0] if features else None
+
+    nearest_rows: list[PlaceSummary] = []
+    if nearest:
+        from .. import services
+
+        capped = max(1, min(int(nearest), geo_settings.RESOLVE_NEAREST_MAX))
+        nearest_rows = [
+            PlaceSummary(
+                uuid=str(row.uuid),
+                name=row.name,
+                country=row.country,
+                display_name=row.display_name,
+                distance_km=row.distance_km,
+            )
+            for row in services.nearby_rows_by_coords(lat, lon, None, capped)
+        ]
+
+    return PlaceResolution(
+        lat=lat,
+        lon=lon,
+        geohash=geohash_utils.encode(
+            lat, lon, precision=geo_settings.GEOHASH_PRECISION
+        ),
+        lang=response.lang,
+        formatted=best.properties.formatted if best else None,
+        address=best.properties if best else None,
+        feature=best,
+        alternatives=features[1:],
+        nearest=nearest_rows,
+    )
+
+
+__all__ = ["get_geocoder", "geocode", "resolve_point"]

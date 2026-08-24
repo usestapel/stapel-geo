@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "geo.reverse_geocode",
+  "description": "Reverse geocoding as ONE confirmable answer: a coordinate pair in, a PlaceResolution dict out — {lat, lon, geohash, lang, formatted, address, feature, alternatives, nearest}. This is what a consumer calls to stamp a human address onto a row it only has coordinates for, and what the browser's geolocation result resolves through. Goes through the same cache + spend ledger as the HTTP proxy.",
+  "type": "object",
+  "properties": {
+    "lat": {"type": "number", "minimum": -90, "maximum": 90, "description": "Latitude to resolve."},
+    "lon": {"type": "number", "minimum": -180, "maximum": 180, "description": "Longitude to resolve."},
+    "lang": {"type": "string", "description": "Requested language; clamped to the provider's indexed set. The language actually used comes back as \"lang\"."},
+    "limit": {"type": "integer", "minimum": 1, "maximum": 50, "description": "Candidates to consider: the first is the pick, the rest become \"alternatives\"."},
+    "nearest": {"type": "integer", "minimum": 0, "description": "Also return N nearest known Location rows from the tree (0 = do not query it at all)."}
+  },
+  "required": ["lat", "lon"],
+  "additionalProperties": false
+}

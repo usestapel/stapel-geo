@@ -54,6 +54,33 @@
             "path": "/geo/api/v1/geocoding/reverse"
           }
         ]
+      },
+      {
+        "kind": "http",
+        "order": 4,
+        "note": "Browser position or dropped pin to a confirmable address, in one call",
+        "note_key": "flow.geo.geocode_address.step.4.note",
+        "ref": "stapel_geo.geocoding.views.GeocodeResolveView.get",
+        "endpoints": [
+          {
+            "method": "GET",
+            "path": "/geo/api/v1/geocoding/resolve"
+          }
+        ]
+      },
+      {
+        "kind": "function",
+        "order": 5,
+        "note": "Modules forward-geocode by name over comm — never importing geo",
+        "note_key": "flow.geo.geocode_address.step.5.note",
+        "ref": "geo.geocode"
+      },
+      {
+        "kind": "function",
+        "order": 6,
+        "note": "Modules turn a stored coordinate back into an address by name",
+        "note_key": "flow.geo.geocode_address.step.6.note",
+        "ref": "geo.reverse_geocode"
       }
     ]
   },
@@ -229,6 +256,86 @@
         "note": "Modules resolve location UUIDs by name over comm",
         "note_key": "flow.geo.location_resolve.step.2.note",
         "ref": "geo.resolve"
+      }
+    ]
+  },
+  {
+    "id": "geo.pick_location",
+    "title": "Pick a location on a map",
+    "title_key": "flow.geo.pick_location.title",
+    "description": "A human chooses WHERE something is — a listing's address, a meeting point, a service area — by searching for it, by letting the browser report their position, or by dragging a pin. The library owns the whole round trip: the basemap's tile layer and its attribution obligations, the search-as-you-type discipline, and the single call that turns a coordinate into an address the user can confirm. A product that only offers raw latitude and longitude fields has not integrated this flow.",
+    "description_key": "flow.geo.pick_location.description",
+    "actors": [
+      "Any user",
+      "Frontends (geo-react)"
+    ],
+    "steps": [
+      {
+        "kind": "human",
+        "order": 0,
+        "note": "The user opens a composer and needs to say where",
+        "note_key": "flow.geo.pick_location.step.0.note",
+        "ref": ""
+      },
+      {
+        "kind": "http",
+        "order": 1,
+        "note": "The picker loads its tile layer, attribution and search discipline",
+        "note_key": "flow.geo.pick_location.step.1.note",
+        "ref": "stapel_geo.basemap.MapConfigView.get",
+        "endpoints": [
+          {
+            "method": "GET",
+            "path": "/geo/api/v1/map/config"
+          }
+        ]
+      },
+      {
+        "kind": "human",
+        "order": 2,
+        "note": "The user grants the browser's geolocation prompt, types an address, or drags the pin",
+        "note_key": "flow.geo.pick_location.step.2.note",
+        "ref": ""
+      },
+      {
+        "kind": "http",
+        "order": 3,
+        "note": "Search-as-you-type, biased to the map's own viewport",
+        "note_key": "flow.geo.pick_location.step.3.note",
+        "ref": "stapel_geo.geocoding.views.GeocodeSearchView.get",
+        "endpoints": [
+          {
+            "method": "GET",
+            "path": "/geo/api/v1/geocoding/search"
+          }
+        ]
+      },
+      {
+        "kind": "http",
+        "order": 4,
+        "note": "The detected position (or the dropped pin) becomes an address to confirm",
+        "note_key": "flow.geo.pick_location.step.4.note",
+        "ref": "stapel_geo.geocoding.views.GeocodeResolveView.get",
+        "endpoints": [
+          {
+            "method": "GET",
+            "path": "/geo/api/v1/geocoding/resolve"
+          }
+        ]
+      },
+      {
+        "kind": "human",
+        "order": 5,
+        "note": "The user confirms the address shown back, or picks one of the alternatives",
+        "note_key": "flow.geo.pick_location.step.5.note",
+        "ref": ""
+      },
+      {
+        "kind": "function",
+        "order": 6,
+        "note": "Server-rendered hosts read the same picker configuration by name",
+        "note_key": "flow.geo.pick_location.step.6.note",
+        "ref": "geo.map_config"
       }
     ]
   }

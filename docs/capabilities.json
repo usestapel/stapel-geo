@@ -1,6 +1,6 @@
 {
   "module": "stapel-geo",
-  "version": "0.3.6",
+  "version": "0.4.0",
   "provides": "Geohash proximity search and geocoding, no GDAL/PostGIS/spatial database: a hierarchical location tree (flat lat/lon points with an auto-encoded geohash and a stable cross-service UUID), a proximity search facade (nearby/radius/bbox) behind one swappable backend, and a geocoder proxy (forward/structured/reverse) behind a provider merge-registry, throttled, cached and spend-ledgered per call.",
   "axes": [
     {
@@ -56,6 +56,33 @@
   ],
   "surface": [
     {
+      "name": "build_map_config",
+      "kind": "factory",
+      "path": "stapel_geo.basemap.build_map_config",
+      "intent": "Assemble the location picker's configuration from STAPEL_GEO — tile template, the attribution the ODbL licence obliges the map to display, the zoom envelope, the operating bbox, the search-as-you-type discipline. Reach for this in a server-rendered host instead of reading the MAP_* settings one by one, so the page and the geo-react picker cannot disagree about what the map is allowed to do."
+    },
+    {
+      "name": "apply_formatter",
+      "kind": "gate_function",
+      "path": "stapel_geo.geocoding.format.apply_formatter",
+      "intent": "Stamp properties.formatted on a GeocodeProperties using the configured ADDRESS_FORMATTER, swallowing a formatter's exception into a null label. A custom Geocoder implementation calls this on every feature it maps, so third-party providers carry the same display line as the built-in ones."
+    },
+    {
+      "name": "format_address",
+      "kind": "gate_function",
+      "path": "stapel_geo.geocoding.format.format_address",
+      "intent": "Build the one-line human label for a geocoded place from its components, in the country's own postal order (house number before or after the street). Already applied to every feature this library returns as properties.formatted — call it directly only when you hold GeocodeProperties you assembled yourself, and override it fleet-wide via STAPEL_GEO['ADDRESS_FORMATTER'] rather than reformatting per product.",
+      "instead_of": [
+        "each product joining name/street/housenumber/city/country its own way"
+      ]
+    },
+    {
+      "name": "street_line",
+      "kind": "gate_function",
+      "path": "stapel_geo.geocoding.format.street_line",
+      "intent": "Just the street half of an address — street and house number joined in the order that country writes them ('7 Tverskaya Street' vs 'Тверская улица, 7'). Reach for this when you render address components in your own layout and only need the one line the anglocentric default gets backwards."
+    },
+    {
       "name": "register_geocoder",
       "kind": "factory",
       "path": "stapel_geo.geocoding.providers.register_geocoder",
@@ -81,6 +108,16 @@
       "kind": "factory",
       "path": "stapel_geo.geocoding.service.get_geocoder",
       "intent": "Instantiate the geocoder provider registered under a name (default STAPEL_GEO['GEOCODER']), validated as a Geocoder subclass. Reach for this instead of resolving the GEOCODERS registry and import_string-ing the class yourself when you need a raw provider call outside the cached/ledgered geocode() path."
+    },
+    {
+      "name": "resolve_point",
+      "kind": "gate_function",
+      "path": "stapel_geo.geocoding.service.resolve_point",
+      "intent": "Turn one coordinate pair into a CONFIRMABLE place in a single round trip: the display line, the address components, the geohash to store, the runner-up candidates, and optionally the nearest known Location rows. This is the server half of 'detect my position' and of a dropped map pin. Call this instead of chaining geocode('reverse') + your own label assembly + your own geohash call — that chain is exactly what every product was rebuilding.",
+      "instead_of": [
+        "geocode('reverse') followed by hand-assembled address text and a separate geohash call",
+        "a composer that just stores raw latitude/longitude and never resolves an address"
+      ]
     },
     {
       "name": "distance_km",

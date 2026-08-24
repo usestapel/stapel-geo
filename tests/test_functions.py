@@ -1,6 +1,7 @@
 """comm Functions geo.nearby / geo.radius / geo.bbox / geo.geohash_encode /
 geo.resolve — schema-validated, in-process, through the search facade."""
 import pytest
+from django.test import override_settings
 from stapel_core.comm import call
 from stapel_core.comm.exceptions import SchemaValidationError
 
@@ -133,3 +134,54 @@ class TestResolveFunction:
     def test_resolve_requires_uuid(self):
         with pytest.raises(SchemaValidationError):
             call("geo.resolve", {})
+
+
+class TestGeocodingFunctions:
+    """geo.geocode / geo.reverse_geocode / geo.map_config over comm.
+
+    Consumers reach geo BY NAME (MODULE.md's first anti-pattern is
+    ``import stapel_geo``), so the geocoding half needs comm Functions
+    too — otherwise a listings backend that wants to stamp an address on
+    a coordinate has no choice but to import, or to make an HTTP call to
+    itself.
+    """
+
+    _FAKE = {
+        "GEOCODERS": {"fake": "stapel_geo.tests.fakes.FakeGeocoder"},
+        "GEOCODER": "fake",
+    }
+
+    @override_settings(STAPEL_GEO=_FAKE)
+    def test_geocode_returns_the_normalized_collection(self):
+        result = call("geo.geocode", {"q": "Metz", "limit": 3})
+        assert result["type"] == "FeatureCollection"
+        assert result["features"][0]["properties"]["name"] == "Metz"
+        # the display line travels with it — no consumer reassembles it
+        assert result["features"][0]["properties"]["formatted"]
+
+    @override_settings(STAPEL_GEO=_FAKE)
+    def test_reverse_geocode_returns_a_confirmable_place(self):
+        result = call("geo.reverse_geocode", {"lat": 49.61, "lon": 6.13})
+        assert result["lat"] == 49.61
+        assert result["geohash"]
+        assert result["formatted"]
+        assert result["address"]["city"] == "Testville"
+
+    @override_settings(STAPEL_GEO=_FAKE)
+    def test_reverse_geocode_can_include_known_locations(self, locations):
+        result = call("geo.reverse_geocode", {"lat": 49.611, "lon": 6.130, "nearest": 2})
+        assert result["nearest"][0]["name"] == "Near"
+
+    def test_map_config_needs_no_arguments(self):
+        result = call("geo.map_config", {})
+        assert result["tiles"]["requires_attribution"] is True
+        assert result["endpoints"]["resolve"] == "api/v1/geocoding/resolve"
+
+    @override_settings(STAPEL_GEO=_FAKE)
+    def test_schemas_are_enforced(self):
+        with pytest.raises(SchemaValidationError):
+            call("geo.geocode", {})  # q is required
+        with pytest.raises(SchemaValidationError):
+            call("geo.reverse_geocode", {"lat": 49.6})  # lon is required
+        with pytest.raises(SchemaValidationError):
+            call("geo.map_config", {"unexpected": 1})

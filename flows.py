@@ -93,10 +93,52 @@ GEOCODE_ADDRESS = Flow(
     actors=["Authenticated user"],
 )
 GEOCODE_ADDRESS.human(order=0, note="The user types an address or drops a map pin")
+GEOCODE_ADDRESS.function(
+    "geo.geocode", order=5,
+    note="Modules forward-geocode by name over comm — never importing geo",
+)
+GEOCODE_ADDRESS.function(
+    "geo.reverse_geocode", order=6,
+    note="Modules turn a stored coordinate back into an address by name",
+)
+
+# ─────────────────────────────────────────────────────────────────────────────
+# geo.pick_location — the human choosing a place on a map
+# ─────────────────────────────────────────────────────────────────────────────
+
+PICK_LOCATION = Flow(
+    "geo.pick_location",
+    title="Pick a location on a map",
+    description=(
+        "A human chooses WHERE something is — a listing's address, a "
+        "meeting point, a service area — by searching for it, by letting "
+        "the browser report their position, or by dragging a pin. The "
+        "library owns the whole round trip: the basemap's tile layer and "
+        "its attribution obligations, the search-as-you-type discipline, "
+        "and the single call that turns a coordinate into an address the "
+        "user can confirm. A product that only offers raw latitude and "
+        "longitude fields has not integrated this flow."
+    ),
+    actors=["Any user", "Frontends (geo-react)"],
+)
+PICK_LOCATION.human(order=0, note="The user opens a composer and needs to say where")
+PICK_LOCATION.human(
+    order=2,
+    note="The user grants the browser's geolocation prompt, types an address, or drags the pin",
+)
+PICK_LOCATION.human(
+    order=5,
+    note="The user confirms the address shown back, or picks one of the alternatives",
+)
+PICK_LOCATION.function(
+    "geo.map_config", order=6,
+    note="Server-rendered hosts read the same picker configuration by name",
+)
 
 __all__ = [
     "LOCATION_BROWSE",
     "LOCATION_NEARBY",
     "LOCATION_RESOLVE",
     "GEOCODE_ADDRESS",
+    "PICK_LOCATION",
 ]
