@@ -116,22 +116,25 @@ PICK_LOCATION = Flow(
         "library owns the whole round trip: the basemap's tile layer and "
         "its attribution obligations, the search-as-you-type discipline, "
         "and the single call that turns a coordinate into an address the "
-        "user can confirm. A product that only offers raw latitude and "
-        "longitude fields has not integrated this flow."
+        "user can confirm. It also owns the frame BEFORE the question is "
+        "asked: the visitor's own address places the map coarsely, so a "
+        "refused prompt costs a city rather than the whole map. A product "
+        "that only offers raw latitude and longitude fields has not "
+        "integrated this flow."
     ),
     actors=["Any user", "Frontends (geo-react)"],
 )
 PICK_LOCATION.human(order=0, note="The user opens a composer and needs to say where")
 PICK_LOCATION.human(
-    order=2,
+    order=3,
     note="The user grants the browser's geolocation prompt, types an address, or drags the pin",
 )
 PICK_LOCATION.human(
-    order=5,
+    order=6,
     note="The user confirms the address shown back, or picks one of the alternatives",
 )
 PICK_LOCATION.function(
-    "geo.map_config", order=6,
+    "geo.map_config", order=7,
     note="Server-rendered hosts read the same picker configuration by name",
 )
 

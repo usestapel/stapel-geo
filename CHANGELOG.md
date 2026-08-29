@@ -4,6 +4,141 @@ All notable changes to stapel-geo are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Pre-1.0 semver: **minor = breaking**, patch = compatible.
 
+## [0.4.1] — 2026-08-30
+
+### The need: the picker has to open somewhere before the user has said anything
+
+0.4.0 shipped the map, the search, the address line and the confirmation
+step — everything downstream of "where are you?". It left the very first
+frame unanswered. A composer or a search page mounts, the browser's
+geolocation prompt goes up, and the map has to be drawn *now*, before the
+answer comes back and whether or not it ever does. **"Denied" is a
+supported answer, not an error** — so are a dismissed prompt, an insecure
+context, an old browser and a desktop with no radio, and in every one of
+them a map still has to open. Opening on `{0, 0}` puts a seller in the
+Gulf of Guinea; opening on a hardcoded capital is the same guess made
+worse, because each product hardcodes a different one.
+
+The server already holds the one fact that answers this without asking
+anybody: the address the request arrived on.
+
+### Added — `GET /geo/api/v1/ip`
+
+- **The endpoint** (`ipgeo/`) answers an `IpLocation`: `lat`, `lon`,
+  `source`, `precision`, `ip_resolved`, `label`, `city`, `region`,
+  `country`, `country_code`, `accuracy_radius_km`. Public (`AllowAny`)
+  and throttled (scope `geo_ip`) — the caller is a visitor with no
+  account, which is the entire situation the verb exists for.
+- **It always answers.** An unknown address, a broken database, a locator
+  a deployment never configured: each comes back `200` with the fallback
+  centre and `ip_resolved: false`. A map that cannot open is worse than a
+  map that opens in the wrong city, and a frontend forced to branch on a
+  4xx here would just hardcode a centre — which is the defect. The one
+  non-200 is `204`, for a deployment with no locator answer **and** no
+  fallback centre: an explicit refusal to have an opinion, told apart
+  from a centre a caller should use.
+- **It says how much it knows.** `source` / `precision` / `ip_resolved`
+  are the difference between "we think you are in Moscow" and "we have no
+  idea, here is where this site lives". A UI that shows the first as a
+  confirmed address is lying to its user.
+- **Locator seam** — `IpLocator` ABC (`locate(ip) -> IpLocation | None`)
+  behind the same merge-registry the geocoders use: `IP_LOCATORS` ←
+  `register_ip_locator()`, with `IP_LOCATOR` naming the default.
+  Returning `None` means "I do not know" and is a **normal** answer (a
+  private address, an unseeded range, a loopback request in development);
+  `IpLocatorError` is for a genuinely broken backend, and the service
+  logs it and falls back rather than 500ing.
+- **Built-ins.** `maxmind` reads an **offline** MaxMind/GeoLite2 City
+  `.mmdb` through the optional `geoip2` package (new extra
+  `stapel-geo[ipgeo]`, path in `IP_MAXMIND_DB`, reader cached per path):
+  no network call, no third party told who visits the site, nothing
+  metered. No database is bundled — MaxMind requires an account to
+  download GeoLite2 and forbids redistributing it, the same
+  bring-your-own discipline the paid geocoders are under. `static`
+  answers one configured point for everybody: not a placeholder, but the
+  honest answer for a single-city marketplace, and better than a provider
+  that is right about the country and wrong about the city.
+- **A floor under both** — `IP_FALLBACK_CENTER`, or `MAP_DEFAULT_CENTER`
+  when it is unset. The map's opening centre is already the deployment's
+  answer to "where does this product live"; making a second setting
+  mandatory to restate it is how the two drift apart.
+- **Answers are cached per address** for `IP_CACHE_TTL_S` (default one
+  hour) — an IP's city does not change between two page loads, and
+  without it a storefront does a lookup per visitor per navigation.
+  Negatives are cached too, but the fallback is applied **on read**, not
+  stored, so moving `MAP_DEFAULT_CENTER` takes effect at once.
+- `map/config`'s `endpoints` gained `"ip": "api/v1/ip"`, so a frontend
+  learns the path from the server like the other four. The
+  `geo.pick_location` flow gained the IP step at order 2.
+- 28 tests (`tests/test_ipgeo.py`), including the forged-header cases.
+
+### Added — which address the request came from
+
+The half of this that is a security decision, not a lookup.
+`X-Forwarded-For` is written by whoever is in front of you and **anyone
+can send one**, so reading its leftmost entry — the idiom every snippet
+on the internet shows — lets a caller pick their own IP by typing it.
+For an endpoint that geolocates and throttles by address, that is the
+whole ballgame.
+
+So the default is `REMOTE_ADDR` and nothing else
+(`IP_TRUSTED_PROXY_DEPTH = 0`), and trusting a header at all is an
+explicit statement of topology: the depth is **how many hops the
+deployment owns** — `1` behind one nginx, `2` behind nginx behind a CDN.
+The chain considered is `X-Forwarded-For ++ [REMOTE_ADDR]` and the client
+is read `depth` places from its **right** end, which is what makes a
+forged prefix inert: a caller may prepend as many entries as they like
+and none of them is ever the one that gets read. A topology the counter
+does not describe replaces the whole function through
+`IP_CLIENT_IP_RESOLVER` instead of accumulating header settings.
+
+### Configuration
+
+New `STAPEL_GEO` keys (full table in `CONFIG.MD`): `IP_LOCATOR`
+(`"maxmind"`), `IP_LOCATORS` (`{}`), `IP_MAXMIND_DB` (`""`),
+`IP_STATIC_POINT` / `IP_STATIC_LABEL` / `IP_STATIC_PRECISION`
+(`None` / `""` / `"city"`), `IP_FALLBACK_CENTER` / `IP_FALLBACK_LABEL`
+(`None` / `""`), `IP_TRUSTED_PROXY_DEPTH` (`0`), `IP_CLIENT_IP_RESOLVER`
+(`stapel_geo.ipgeo.client_ip.client_ip_from_request`), `IP_PERMISSIONS`
+(`[AllowAny]`), `IP_THROTTLE` / `IP_ANON_THROTTLE` (`120/min` /
+`60/min`), `IP_CACHE_TTL_S` (`3600`). New extra: `stapel-geo[ipgeo]`
+(and `[all]` now covers `redis,ipgeo`).
+
+### Checks
+
+- **`stapel_geo.W008`** — `IP_LOCATOR` names an unregistered locator, or
+  its registry entry fails to import (the `geoip2` package is missing) or
+  is not an `IpLocator`.
+- **`stapel_geo.W009`** — the configured locator has nothing to answer
+  with (no database, no static point) **and** no fallback centre exists,
+  so the endpoint answers `204` to everybody. This is the failure that
+  most needs saying out loud: an IP endpoint returning the default to
+  every visitor looks exactly like one that is working.
+- **`stapel_geo.W010`** — the site declares itself behind a proxy
+  (`USE_X_FORWARDED_HOST` or `SECURE_PROXY_SSL_HEADER`) while
+  `IP_TRUSTED_PROXY_DEPTH` is still `0`, so the address being geolocated
+  is the proxy's and every visitor lands in the same city.
+
+### What this is not
+
+An IP is a **coarse** signal and this ships as one deliberately. It is
+city-level at best where it is right at all; it is the exit node for
+anyone on a VPN and a national gateway for a whole mobile carrier. It is
+the first frame of a map and the thing a human then corrects — **never a
+location to store on a record, and never rendered as "your address"**.
+The payload carries `precision` and `ip_resolved` precisely so a UI can
+tell which it is holding. What gets saved is what the person confirmed
+through `geocoding/resolve`.
+
+### Compatibility
+
+Purely additive — a new endpoint, a new settings block whose defaults
+change no existing behaviour, and one new key in `map/config`'s
+`endpoints` dict. No migration, no removals, no changed responses. A
+deployment that ignores all of it keeps the 0.4.0 surface unchanged; the
+`geoip2` dependency is optional and is imported inside the call, so it
+costs nothing to not install.
+
 ## [0.4.0] — 2026-08-24
 
 ### The defect: a location is chosen by a human, and this library shipped coordinates

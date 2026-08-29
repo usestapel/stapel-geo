@@ -7,6 +7,16 @@
 # workspace venv, or a CI venv) and be a 3.12 interpreter (emission pin).
 PYTHON ?= python3
 
+# llms.txt ceiling. RAISED DELIBERATELY from the 4000 default in 0.4.1, which is
+# the escape the tool itself names — and it is a raise, not a silencing: the file
+# is still refused whole if it goes over, because a truncated context file reads
+# exactly like a complete one. What paid for it is a subsystem, not prose: the
+# ipgeo seam (locator registry, the proxy-trust resolver, the fallback centre)
+# added an axis, two extension points and three surface entries, and the honest
+# choice was between describing them and pretending geo has one fewer moving
+# part than it has.
+LLMS_BUDGET ?= 4600
+
 .PHONY: contract contract-check
 
 # Emit the contract triad + the human-readable error reference into docs/, plus
@@ -31,7 +41,7 @@ contract:
 	from django.core.management import call_command; \
 	call_command('generate_error_docs', '--out', 'docs')"
 	$(PYTHON) -m stapel_tools.surface . --patch
-	$(PYTHON) -m stapel_tools.llms_txt . --out docs
+	$(PYTHON) -m stapel_tools.llms_txt . --out docs --budget $(LLMS_BUDGET)
 	$(PYTHON) -m stapel_tools.readme .
 
 # Drift gate. `stapel_tools.surface . --patch --check` runs against the real
@@ -47,7 +57,7 @@ contract-check:
 	mkdir -p "$$tmp/docs"; \
 	$(PYTHON) -m stapel_geo._codegen --out "$$tmp/docs" || { rm -rf "$$tmp"; exit 1; }; \
 	cp docs/capabilities.json "$$tmp/docs/capabilities.json"; \
-	$(PYTHON) -m stapel_tools.llms_txt "$$tmp" --out "$$tmp/docs" || { rm -rf "$$tmp"; exit 1; }; \
+	$(PYTHON) -m stapel_tools.llms_txt "$$tmp" --out "$$tmp/docs" --budget $(LLMS_BUDGET) || { rm -rf "$$tmp"; exit 1; }; \
 	rc=0; \
 	for f in schema.json flows.json errors.json llms.txt; do \
 		if ! cmp -s "docs/$$f" "$$tmp/docs/$$f"; then \

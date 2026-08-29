@@ -280,7 +280,7 @@ class GeocodeSearchView(_GeocodeView):
     )
     @flow_step(GEOCODE_ADDRESS, order=1,
                note="Free-text forward geocoding (throttled, cached, ledgered)")
-    @flow_step(PICK_LOCATION, order=3,
+    @flow_step(PICK_LOCATION, order=4,
                note="Search-as-you-type, biased to the map's own viewport")
     def get(self, request):
         query = request.query_params.get("q", "")
@@ -405,7 +405,7 @@ class GeocodeResolveView(_GeocodeView):
     )
     @flow_step(GEOCODE_ADDRESS, order=4,
                note="Browser position or dropped pin to a confirmable address, in one call")
-    @flow_step(PICK_LOCATION, order=4,
+    @flow_step(PICK_LOCATION, order=5,
                note="The detected position (or the dropped pin) becomes an address to confirm")
     def get(self, request):
         try:

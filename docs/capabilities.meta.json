@@ -1,16 +1,39 @@
 {
   "_comment": "Curated layer for the `surface` section of docs/capabilities.json (discoverability-design.md §1.2). NOTE the honest boundary: stapel-geo's capabilities.json is otherwise still HAND-WRITTEN (no stapel_geo._capabilities emitter exists yet) even though this module DOES emit its own schema.json/flows.json/errors.json triad via stapel_geo._codegen — see Makefile. `make contract` patches in the two derivable things: module/version from pyproject and the derived `surface`. Converting the rest of capabilities.json to an emitter is separate work.",
-
   "surface_roots": [
-    {"select": "functions", "path": "geohash.py"},
-    {"select": "functions", "path": "services.py"},
-    {"select": "functions", "path": "geocoding/service.py"},
-    {"select": "functions", "path": "geocoding/providers.py"},
-    {"select": "functions", "path": "geocoding/format.py"},
-    {"select": "functions", "path": "basemap.py"},
-    {"select": "functions", "path": "search/__init__.py"}
+    {
+      "select": "functions",
+      "path": "geohash.py"
+    },
+    {
+      "select": "functions",
+      "path": "services.py"
+    },
+    {
+      "select": "functions",
+      "path": "geocoding/service.py"
+    },
+    {
+      "select": "functions",
+      "path": "geocoding/providers.py"
+    },
+    {
+      "select": "functions",
+      "path": "geocoding/format.py"
+    },
+    {
+      "select": "functions",
+      "path": "basemap.py"
+    },
+    {
+      "select": "functions",
+      "path": "ipgeo/service.py"
+    },
+    {
+      "select": "functions",
+      "path": "search/__init__.py"
+    }
   ],
-
   "surface": {
     "encode": {
       "kind": "gate_function",
@@ -119,6 +142,28 @@
     "get_backend": {
       "kind": "factory",
       "intent": "Instantiate the configured STAPEL_GEO['SEARCH_BACKEND'], validated against the GeoSearchBackend protocol (nearby/radius/bbox). Reach for this instead of import_string-ing the setting yourself when you need the raw backend object — e.g. RedisGeoSearchBackend's own index()/rebuild() maintenance methods, which the services.py facade does not expose."
+    },
+    "locate_ip": {
+      "kind": "gate_function",
+      "intent": "Place a client IP coarsely, or return the deployment's fallback centre — the one call behind GET api/v1/ip. Never raises for input and never returns a location to store on a record: it exists so a map or a search opens somewhere real before the browser's position prompt is answered (or after it is refused). Reach for it server-side when a page needs a starting centre.",
+      "instead_of": [
+        "hardcoding a city centre in a frontend",
+        "calling a third-party IP-geolocation API from your own view"
+      ]
+    },
+    "get_ip_locator": {
+      "kind": "gate_function",
+      "intent": "Resolve the configured IP locator by NAME through the IP_LOCATORS merge registry and instantiate it. Reach for it when you need the provider itself (a management command seeding a cache, a test); ordinary callers want locate_ip, which adds the cache and the fallback.",
+      "instead_of": [
+        "importing a locator class directly and pinning a provider"
+      ]
+    },
+    "fallback_location": {
+      "kind": "gate_function",
+      "intent": "The centre to open on when nothing is known about the caller — IP_FALLBACK_CENTER, or MAP_DEFAULT_CENTER when it is unset. Reach for it in a surface that needs the same 'no opinion' answer the IP verb gives, so the two cannot drift apart.",
+      "instead_of": [
+        "a second hardcoded default centre"
+      ]
     }
   }
 }

@@ -13,6 +13,11 @@ Dotted-path keys listed in ``import_strings`` are resolved with
   :class:`stapel_geo.search.base.GeoSearchBackend` implementation.
 - ``GEOCODE_CACHE_POLICY`` — the geocode cache seam: any
   :class:`stapel_geo.geocoding.cache.GeocodeCachePolicy` subclass.
+- ``IP_CLIENT_IP_RESOLVER`` — which address a request came from (the
+  proxy-trust decision), ``request -> str | None``.
+
+``GEOCODER`` and ``IP_LOCATOR`` are **provider names** (MERGE-registry
+semantics), not dotted paths.
 
 ``GEOCODER`` is **a provider name** (MERGE-registry semantics), not a
 dotted path: the name is resolved through ``registered_geocoders()``
@@ -173,8 +178,61 @@ geo_settings = AppSettings(
         # is not one upstream call.
         "MAP_SEARCH_MIN_CHARS": 3,
         "MAP_SEARCH_DEBOUNCE_MS": 350,
+        # ------------------------------------------------------------------
+        # IP geolocation — the centre a map opens on before anyone is asked
+        # ------------------------------------------------------------------
+        # Name of the IP locator (a key of registered_ip_locators(): builtin
+        # "maxmind"/"static", or a name you registered). Coarse by nature and
+        # never a location to store on a record — see stapel_geo.ipgeo.
+        "IP_LOCATOR": "maxmind",
+        # Merge-registry of extra locators: {"name": "dotted.path.Class"}.
+        # Merged over BUILTIN_IP_LOCATORS; None/"" removes a builtin name.
+        "IP_LOCATORS": {},
+        # Path to an offline MaxMind/GeoLite2 City .mmdb for the "maxmind"
+        # locator. No default and no bundled database: MaxMind requires an
+        # account to download GeoLite2 and forbids redistribution, the same
+        # bring-your-own discipline the paid geocoders are under.
+        "IP_MAXMIND_DB": "",
+        # The "static" locator's answer: [lat, lon] for every caller, plus
+        # the line to show for it. A single-city marketplace has one honest
+        # answer and this is where it says so.
+        "IP_STATIC_POINT": None,
+        "IP_STATIC_LABEL": "",
+        "IP_STATIC_PRECISION": "city",
+        # Where to open when the locator has nothing. Unset, MAP_DEFAULT_CENTER
+        # answers — the map's own opening centre is already this deployment's
+        # answer to "where does this product live", and a second setting
+        # restating it is how the two drift apart. IP_FALLBACK_LABEL is the
+        # line shown for it (leave empty to show no place name at all).
+        "IP_FALLBACK_CENTER": None,
+        "IP_FALLBACK_LABEL": "",
+        # How many proxies the deployment genuinely owns in front of Django.
+        # 0 (the default) reads REMOTE_ADDR and NOTHING else; behind one nginx
+        # it is 1. The chain is counted from the RIGHT, so a forged
+        # X-Forwarded-For prefix is inert — see ipgeo/client_ip.py.
+        "IP_TRUSTED_PROXY_DEPTH": 0,
+        # The whole client-address decision as one swappable function
+        # (request -> str | None), for a topology the depth counter does not
+        # describe.
+        "IP_CLIENT_IP_RESOLVER": "stapel_geo.ipgeo.client_ip.client_ip_from_request",
+        # Permission classes of the IP endpoint. AllowAny by default and
+        # deliberately: the caller is a visitor who has no account yet, which
+        # is the entire situation this endpoint exists for.
+        "IP_PERMISSIONS": ["rest_framework.permissions.AllowAny"],
+        # Throttle rates (ScopedRateThrottle scope "geo_ip"). The anonymous
+        # rate is the live one here, unlike the geocoder's.
+        "IP_THROTTLE": "120/min",
+        "IP_ANON_THROTTLE": "60/min",
+        # How long one address's answer is cached. An IP's city does not
+        # change between two page loads; 0 disables the cache.
+        "IP_CACHE_TTL_S": 3600,
     },
-    import_strings=("SEARCH_BACKEND", "GEOCODE_CACHE_POLICY", "ADDRESS_FORMATTER"),
+    import_strings=(
+        "SEARCH_BACKEND",
+        "GEOCODE_CACHE_POLICY",
+        "ADDRESS_FORMATTER",
+        "IP_CLIENT_IP_RESOLVER",
+    ),
 )
 
 __all__ = ["geo_settings"]

@@ -19,10 +19,25 @@ fails.
 import json
 from pathlib import Path
 
+import re
+
 from stapel_tools.llms_txt import render
 
 REPO = Path(__file__).resolve().parent.parent
 DOCS = REPO / "docs"
+
+
+def _budget() -> int:
+    """The llms.txt ceiling, read from the Makefile that emits the file.
+
+    Not a second constant. This module's raise (LLMS_BUDGET) is a deliberate
+    decision recorded in one place; a copy of the number here would go stale
+    the first time it moves and the drift gate would then be measuring a
+    budget nobody uses.
+    """
+    makefile = (REPO / "Makefile").read_text()
+    match = re.search(r"^LLMS_BUDGET \?= *(\d+)", makefile, re.M)
+    return int(match.group(1)) if match else 4000
 
 
 def _inputs() -> dict:
@@ -44,7 +59,7 @@ def test_llms_txt_committed():
 def test_llms_txt_has_no_drift():
     """Re-render in-process from the committed inputs; must match byte-for-byte."""
     committed = (DOCS / "llms.txt").read_text()
-    regenerated = render(_inputs())
+    regenerated = render(_inputs(), budget=_budget())
     assert committed == regenerated, (
         "docs/llms.txt drifted — run `make contract` and commit docs/llms.txt"
     )
@@ -53,7 +68,7 @@ def test_llms_txt_has_no_drift():
 def test_llms_txt_emission_is_deterministic():
     """Two independent emissions from the same inputs are byte-identical."""
     inputs = _inputs()
-    assert render(inputs) == render(inputs)
+    assert render(inputs, budget=_budget()) == render(inputs, budget=_budget())
 
 
 # --- README.md — the sixth artifact (tracker #257) ---------------------------

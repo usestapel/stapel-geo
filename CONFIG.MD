@@ -52,3 +52,17 @@ below.
 | MAP_GEOLOCATION | env | whether the default skin offers the browser's position prompt. | no | True |
 | MAP_SEARCH_MIN_CHARS | env | characters before search-as-you-type fires. | no | 3 |
 | MAP_SEARCH_DEBOUNCE_MS | env | idle time before a keystroke becomes an upstream request. | no | 350 |
+| IP_LOCATOR | env | **name** of the IP locator (a registered_ip_locators() key: builtin "maxmind"/"static", or one you registered). Coarse by nature — a map's opening centre, never a location to store on a record. | no | maxmind |
+| IP_LOCATORS | env | merge-registry of extra locators `{name: dotted_path}` over BUILTIN_IP_LOCATORS; None/"" removes a name. | no | {} |
+| IP_MAXMIND_DB | env | path to an offline MaxMind/GeoLite2 City `.mmdb` for the "maxmind" locator. No default and no bundled database: MaxMind requires an account to download GeoLite2 and forbids redistribution — the same bring-your-own discipline the paid geocoders are under. | no | "" |
+| IP_STATIC_POINT | env | the "static" locator's answer for every caller, as [lat, lon]. A single-city marketplace has one honest answer and this is where it says so. Unset, the locator returns nothing and the fallback centre answers. | no | None |
+| IP_STATIC_LABEL | env | the display line shown for IP_STATIC_POINT. | no | "" |
+| IP_STATIC_PRECISION | env | how specific the static answer claims to be (city / region / country / default). | no | city |
+| IP_FALLBACK_CENTER | env | where to open when the locator has nothing, as [lat, lon]. Unset, MAP_DEFAULT_CENTER answers — the map's own opening centre is already this deployment's answer to "where does this product live", and a second setting restating it is how the two drift apart. | no | None |
+| IP_FALLBACK_LABEL | env | the line shown for the fallback centre; empty shows no place name at all. | no | "" |
+| IP_TRUSTED_PROXY_DEPTH | env | how many proxies the deployment genuinely owns in front of Django. 0 reads REMOTE_ADDR and **nothing else**; behind one nginx it is 1. The chain `X-Forwarded-For ++ [REMOTE_ADDR]` is counted from the RIGHT, so a caller-forged prefix is inert (checks.W010). | no | 0 |
+| IP_CLIENT_IP_RESOLVER | env | the whole client-address decision as one swappable function `(request) -> str \| None` (REPLACE seam), for a topology the depth counter does not describe. | no | stapel_geo.ipgeo.client_ip.client_ip_from_request |
+| IP_PERMISSIONS | env | permission classes of the IP endpoint. AllowAny by default and deliberately: the caller is a visitor who has no account yet, which is the entire situation this endpoint exists for. | no | [rest_framework.permissions.AllowAny] |
+| IP_THROTTLE | env | DRF scoped throttle rate (scope "geo_ip") for identified callers. | no | 120/min |
+| IP_ANON_THROTTLE | env | throttle rate for anonymous callers — the live one here, unlike the geocoder's, because anonymous is the expected caller. | no | 60/min |
+| IP_CACHE_TTL_S | env | how long one address's answer is cached; an IP's city does not change between two page loads. 0 disables the cache. | no | 3600 |

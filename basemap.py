@@ -97,6 +97,7 @@ ENDPOINTS = {
     "reverse": "api/v1/geocoding/reverse",
     "resolve": "api/v1/geocoding/resolve",
     "locations_nearby": "api/v1/locations/nearby-by-coords",
+    "ip": "api/v1/ip",
 }
 
 

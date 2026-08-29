@@ -22,6 +22,13 @@ a bad value must not block deploys, only warn.
 - ``stapel_geo.W007`` — the OSM Foundation's public tile server is
   configured as the basemap outside DEBUG. Its Tile Usage Policy
   forbids that; a product needs its own tiles.
+- ``stapel_geo.W008`` — ``IP_LOCATOR`` names an unregistered locator, or
+  its registry entry fails to import / is not an ``IpLocator``.
+- ``stapel_geo.W009`` — the configured IP locator cannot answer anybody
+  (no MaxMind database, no static point) AND there is no fallback
+  centre, so the endpoint has nothing to say to any visitor.
+- ``stapel_geo.W010`` — ``IP_TRUSTED_PROXY_DEPTH`` is 0 while the site
+  runs behind a proxy: every visitor geolocates to the proxy.
 """
 from __future__ import annotations
 
@@ -209,9 +216,129 @@ def check_basemap(app_configs, **kwargs):
     ]
 
 
+@checks.register("stapel_geo")
+def check_ip_locator(app_configs, **kwargs):
+    """The IP locator resolves, and has something to answer with.
+
+    W-level throughout: an unresolvable locator degrades to the fallback
+    centre and the map still opens, so this must warn rather than block a
+    deploy. What it must NOT do is stay silent — an IP endpoint that
+    answers "the default" to everybody looks like it is working.
+    """
+    from django.utils.module_loading import import_string
+
+    from .conf import geo_settings
+    from .ipgeo.base import IpLocator
+    from .ipgeo.providers import registered_ip_locators
+
+    name = geo_settings.IP_LOCATOR
+    if not name:
+        return []
+    registry = registered_ip_locators()
+    dotted_path = registry.get(name)
+    if not dotted_path:
+        return [
+            checks.Warning(
+                f"STAPEL_GEO['IP_LOCATOR'] names {name!r}, which is not a registered "
+                f"IP locator (registered: {sorted(registry)}).",
+                hint="Add it via STAPEL_GEO['IP_LOCATORS'] or register_ip_locator(); "
+                     "until then every visitor gets the fallback centre.",
+                id="stapel_geo.W008",
+            )
+        ]
+    try:
+        locator = import_string(dotted_path)
+    except ImportError as exc:
+        return [
+            checks.Warning(
+                f"IP locator {name!r} ({dotted_path!r}) cannot be imported: {exc}",
+                hint="Fix the dotted path or install the missing dependency "
+                     "(the 'maxmind' locator needs `pip install "
+                     "'stapel-geo[ipgeo]'`).",
+                id="stapel_geo.W008",
+            )
+        ]
+    if not (inspect.isclass(locator) and issubclass(locator, IpLocator)):
+        return [
+            checks.Warning(
+                f"IP locator {name!r} ({dotted_path!r}) is not a "
+                "stapel_geo.ipgeo.base.IpLocator subclass.",
+                hint="Subclass IpLocator and implement locate(ip).",
+                id="stapel_geo.W008",
+            )
+        ]
+
+    # It resolves. Can it answer anyone?
+    import os
+
+    silent = (
+        (name == "maxmind" and not os.path.exists(geo_settings.IP_MAXMIND_DB or ""))
+        or (name == "static" and not geo_settings.IP_STATIC_POINT)
+    )
+    has_fallback = bool(
+        geo_settings.IP_FALLBACK_CENTER or geo_settings.MAP_DEFAULT_CENTER
+    )
+    if silent and not has_fallback:
+        return [
+            checks.Warning(
+                f"The {name!r} IP locator has nothing to answer with "
+                "(no database / no static point) and no fallback centre is "
+                "configured either, so GET geo/api/v1/ip answers 204 to "
+                "everybody.",
+                hint="Set STAPEL_GEO['IP_MAXMIND_DB'] (or IP_STATIC_POINT), or "
+                     "give the deployment a MAP_DEFAULT_CENTER / "
+                     "IP_FALLBACK_CENTER so a picker still opens somewhere real.",
+                id="stapel_geo.W009",
+            )
+        ]
+    return []
+
+
+@checks.register("stapel_geo")
+def check_ip_proxy_depth(app_configs, **kwargs):
+    """Behind a proxy, depth 0 geolocates the proxy and not the visitor.
+
+    There is no reliable way to detect a reverse proxy from inside Django,
+    so this fires on the one signal that is a deliberate host statement:
+    ``USE_X_FORWARDED_HOST`` or ``SECURE_PROXY_SSL_HEADER`` set (a site
+    that has told Django it is behind something) while
+    ``IP_TRUSTED_PROXY_DEPTH`` is still 0.
+    """
+    from django.conf import settings
+
+    from .conf import geo_settings
+
+    try:
+        depth = int(geo_settings.IP_TRUSTED_PROXY_DEPTH or 0)
+    except (TypeError, ValueError):
+        depth = 0
+    if depth > 0:
+        return []
+    behind_proxy = bool(
+        getattr(settings, "USE_X_FORWARDED_HOST", False)
+        or getattr(settings, "SECURE_PROXY_SSL_HEADER", None)
+    )
+    if not behind_proxy:
+        return []
+    return [
+        checks.Warning(
+            "This site declares itself to be behind a proxy, but "
+            "STAPEL_GEO['IP_TRUSTED_PROXY_DEPTH'] is 0 — so the address "
+            "GET geo/api/v1/ip geolocates is the PROXY's, and every visitor "
+            "lands in the same city.",
+            hint="Set IP_TRUSTED_PROXY_DEPTH to the number of proxies you own "
+                 "(1 behind a single nginx). It counts from the right of "
+                 "X-Forwarded-For, so a forged prefix stays inert.",
+            id="stapel_geo.W010",
+        )
+    ]
+
+
 __all__ = [
     "check_geocoder",
     "check_search_backend",
     "check_geocoder_languages",
+    "check_ip_locator",
+    "check_ip_proxy_depth",
     "check_basemap",
 ]

@@ -1,14 +1,16 @@
-# stapel-geo 0.4.0
+# stapel-geo 0.4.1
 
-Geohash proximity search and geocoding, no GDAL/PostGIS/spatial database: a hierarchical location tree (flat lat/lon points with an auto-encoded geohash and a stable cross-service UUID), a proximity search facade (nearby/radius/bbox) behind one swappable backend, and a geocoder proxy (forward/structured/reverse) behind a provider merge-registry, throttled, cached and spend-ledgered per call.
+Geohash proximity search and geocoding, no GDAL/PostGIS/spatial database: a hierarchical location tree (flat lat/lon points with an auto-encoded geohash and a stable cross-service UUID), a proximity search facade (nearby/radius/bbox) behind one swappable backend, and a geocoder proxy (forward/structured/reverse) behind a provider merge-registry, throttled, cached and spend-ledgered per call, plus a coarse IP-geolocation verb behind its own provider registry, so a map opens on a real place before the browser's position prompt is answered.
 
-Contract: axes 2 · surface 21 · extension points 4 · operations 16 · error codes 50 · flows 5.
+Contract: axes 3 · surface 24 · extension points 6 · operations 17 · error codes 50 · flows 5.
 Generated from docs/capabilities.json by `stapel-llms-txt` — do not edit; drift-gated by `make contract-check`.
 
 ## Configuration axes — what a product switches on
 Settings keys; `default` is what you get by saying nothing. Turning an axis off unmounts the operations it gates.
 - GEOCODER [enum, default "photon"] — Default geocoding provider
   Default geocoding provider name, resolved through the GEOCODERS merge-registry (built-in photon/nominatim, or a registered name). google/yandex are key-gated stubs a host implements with its own PAYG keys (conf.py, MODULE.md 'Geocoder provider seam').
+- IP_LOCATOR [enum, default "maxmind"] — Visitor IP geolocation provider
+  Which locator places a visitor for GET api/v1/ip, through the IP_LOCATORS merge-registry (maxmind reads an offline .mmdb; static answers one configured point). No answer falls back to IP_FALLBACK_CENTER / MAP_DEFAULT_CENTER rather than failing.
 - SEARCH_BACKEND [enum, default "stapel_geo.search.postgres.PostgresGeoSearchBackend"] — Proximity search backend
   Which proximity-search backend serves nearby/radius/bbox. Default runs geohash prefix expansion over the primary database (no extra infra); a Redis GEOSEARCH side-index backend ships for the hot set; Elasticsearch/Solr are named stubs (README.md 'Proximity search facade', conf.py).
 
@@ -26,12 +28,21 @@ This is the answer to "does Stapel already have something for X?". `instead of` 
 - encode — stapel_geo.geohash.encode
   instead of: a second geohash-encoding dependency, hand-rolled base32 geohash arithmetic
   Encode a lat/lon pair to a geohash string of the given precision (pure arithmetic, no DB, no GDAL) — the same helper Location.save() and the geo.geohash_encode comm Function call underneath. Reach for this in-process instead of round-tripping through the comm bus, and instead of pulling in a second geohash library.
+- fallback_location — stapel_geo.ipgeo.service.fallback_location
+  instead of: a second hardcoded default centre
+  The centre to open on when nothing is known about the caller — IP_FALLBACK_CENTER, or MAP_DEFAULT_CENTER when it is unset. Reach for it in a surface that needs the same 'no opinion' answer the IP verb gives, so the two cannot drift apart.
 - format_address — stapel_geo.geocoding.format.format_address
   instead of: each product joining name/street/housenumber/city/country its own way
   Build the one-line human label for a geocoded place from its components, in the country's own postal order (house number before or after the street). Already applied to every feature this library returns as properties.formatted — call it directly only when you hold GeocodeProperties you assembled yourself, and override it fleet-wide via STAPEL_GEO['ADDRESS_FORMATTER'] rather than reformatting per product.
 - geocode — stapel_geo.geocoding.service.geocode
   instead of: calling a Geocoder provider's search/reverse/structured directly, bypassing the cache and the spend ledger
   The one call path the geocoder proxy views use: provider resolution by name, cache lookup (GEOCODE_CACHE_POLICY), the provider call, and an always-written GeocodeCache spend-ledger row. Call this instead of calling a Geocoder provider directly — a direct call skips the cache and, more importantly, skips the accounting row that makes provider spend visible.
+- get_ip_locator — stapel_geo.ipgeo.service.get_ip_locator
+  instead of: importing a locator class directly and pinning a provider
+  Resolve the configured IP locator by NAME through the IP_LOCATORS merge registry and instantiate it. Reach for it when you need the provider itself (a management command seeding a cache, a test); ordinary callers want locate_ip, which adds the cache and the fallback.
+- locate_ip — stapel_geo.ipgeo.service.locate_ip
+  instead of: calling a third-party IP-geolocation API from your own view, hardcoding a city centre in a frontend
+  Place a client IP coarsely, or return the deployment's fallback centre — the one call behind GET api/v1/ip. Never raises for input and never returns a location to store on a record: it exists so a map or a search opens somewhere real before the browser's position prompt is answered (or after it is refused). Reach for it server-side when a page needs a starting centre.
 - nearby — stapel_geo.geohash.nearby
   instead of: a hand-rolled geohash neighbour-widening / cell-expansion search
   The proven 9-cell geohash neighbour-widening top-K search — equator/antimeridian/pole safe, with a proven-coverage stopping rule and an authoritative full-scan fallback. This is what PostgresGeoSearchBackend runs underneath; a custom SEARCH_BACKEND implementation should call this instead of re-deriving geohash neighbour widening, which is exactly where the pole/antimeridian edge cases hide.
@@ -71,6 +82,10 @@ This is the answer to "does Stapel already have something for X?". `instead of` 
   MERGE registry ({name: dotted_path}) over BUILTIN_GEOCODERS (photon/nominatim/google/yandex); None/'' removes a builtin name. Also extendable at runtime via register_geocoder() (geocoding/providers.py, MODULE.md 'Geocoder provider seam').
 - GEOCODE_CACHE_POLICY [dotted_path]
   REPLACE seam: GeocodeCachePolicy ABC (should_cache/lookup/store); default LedgerCachePolicy answers from the GeocodeCache ledger table within GEOCODE_CACHE_TTL_DAYS (geocoding/cache.py, MODULE.md 'Geocode cache seam').
+- IP_CLIENT_IP_RESOLVER [dotted_path]
+  REPLACE seam: request -> str | None, the whole proxy-trust decision. The default counts X-Forwarded-For from the RIGHT by IP_TRUSTED_PROXY_DEPTH, so a forged prefix is inert (ipgeo/client_ip.py).
+- IP_LOCATORS [merge_registry]
+  MERGE registry ({name: dotted_path}) over BUILTIN_IP_LOCATORS (maxmind/static); None/'' removes a name. Implement IpLocator.locate(ip) -> IpLocation | None, where None means 'I do not know' and is a normal answer (ipgeo/providers.py).
 - SEARCH_BACKEND [dotted_path]
   REPLACE seam: implement the GeoSearchBackend protocol (nearby/radius/bbox) and point the setting at your class (search/base.py, MODULE.md 'Search backend seam').
 - serializer_seams [class_override]
@@ -79,7 +94,7 @@ This is the answer to "does Stapel already have something for X?". `instead of` 
 ## Fits with — fleet dependencies
 - stapel-core (required) — comm bus (Functions geo.nearby/geo.radius/geo.bbox/geo.geohash_encode/geo.resolve), AppSettings config layer, flows, error registry (pyproject.toml dependency; conf.py:25, functions.py:25, flows.py:12, errors.py:6)
 
-## HTTP operations (16) — call by operationId, never by a typed path
+## HTTP operations (17) — call by operationId, never by a typed path
 Paths are relative to `/geo/api/v1/`.
 ### Geocoding
 - GET /geocoding/resolve — geo_api_v1_geocoding_resolve_retrieve
@@ -99,6 +114,7 @@ Paths are relative to `/geo/api/v1/`.
 - PUT /locations/{id}/ — geo_api_v1_locations_update
 - GET /locations/validate-uuid/{uuid}/ — geo_api_v1_locations_validate_uuid_retrieve
 ### Map
+- GET /ip — geo_api_v1_ip_retrieve
 - GET /map/config — geo_api_v1_map_config_retrieve
 
 ## Error codes (50) — the StapelError envelope

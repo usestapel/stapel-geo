@@ -354,6 +354,54 @@
         }
       }
     },
+    "/geo/api/v1/ip": {
+      "get": {
+        "operationId": "geo_api_v1_ip_retrieve",
+        "description": "A coarse, city-at-best guess derived from the caller's own IP address, for opening a map before the browser's geolocation prompt has been answered — or after it was refused. Never a location to store on a record. Answers 200 with the deployment's fallback centre (`ip_resolved: false`) when the address cannot be placed, and 204 when the deployment has configured no fallback centre either.",
+        "summary": "Where the calling client appears to be",
+        "tags": [
+          "Map"
+        ],
+        "security": [
+          {
+            "JWTCookieAuth": []
+          },
+          {}
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IpLocation"
+                },
+                "examples": {
+                  "IpLocation": {
+                    "value": {
+                      "lat": 55.7558,
+                      "lon": 37.6173,
+                      "source": "maxmind",
+                      "precision": "city",
+                      "ip_resolved": true,
+                      "label": "Moscow, Russia",
+                      "city": "Moscow",
+                      "region": "Moscow",
+                      "country": "Russia",
+                      "country_code": "RU",
+                      "accuracy_radius_km": 20
+                    }
+                  }
+                }
+              }
+            },
+            "description": ""
+          },
+          "204": {
+            "description": "No response body"
+          }
+        }
+      }
+    },
     "/geo/api/v1/locations/": {
       "get": {
         "operationId": "geo_api_v1_locations_list",
@@ -1091,6 +1139,81 @@
             "example": "default"
           }
         }
+      },
+      "IpLocation": {
+        "type": "object",
+        "description": "A guess at where the caller is, with its provenance attached.",
+        "properties": {
+          "lat": {
+            "type": "number",
+            "format": "double",
+            "description": "Latitude of the point a map should open on",
+            "example": 55.7558
+          },
+          "lon": {
+            "type": "number",
+            "format": "double",
+            "description": "Longitude of the point a map should open on",
+            "example": 37.6173
+          },
+          "source": {
+            "type": "string",
+            "description": "Which locator answered — a provider name, or \"fallback\"",
+            "example": "maxmind"
+          },
+          "precision": {
+            "type": "string",
+            "description": "How specific the answer is: city, region, country or default",
+            "example": "city"
+          },
+          "ip_resolved": {
+            "type": "boolean",
+            "description": "Whether this came from the caller's address at all",
+            "example": true
+          },
+          "label": {
+            "type": "string",
+            "nullable": true,
+            "description": "One human line for the place, or null when there is none to show",
+            "example": "Moscow, Russia"
+          },
+          "city": {
+            "type": "string",
+            "nullable": true,
+            "description": "City name when the locator knows one",
+            "example": "Moscow"
+          },
+          "region": {
+            "type": "string",
+            "nullable": true,
+            "description": "First-level subdivision when the locator knows one",
+            "example": "Moscow"
+          },
+          "country": {
+            "type": "string",
+            "nullable": true,
+            "description": "Country name when the locator knows one",
+            "example": "Russia"
+          },
+          "country_code": {
+            "type": "string",
+            "nullable": true,
+            "description": "ISO-3166-1 alpha-2 country code",
+            "example": "RU"
+          },
+          "accuracy_radius_km": {
+            "type": "number",
+            "format": "double",
+            "nullable": true,
+            "description": "Radius the provider itself claims, when it claims one",
+            "example": 20
+          }
+        },
+        "required": [
+          "lat",
+          "lon",
+          "source"
+        ]
       },
       "Location": {
         "type": "object",

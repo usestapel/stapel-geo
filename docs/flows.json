@@ -263,7 +263,7 @@
     "id": "geo.pick_location",
     "title": "Pick a location on a map",
     "title_key": "flow.geo.pick_location.title",
-    "description": "A human chooses WHERE something is — a listing's address, a meeting point, a service area — by searching for it, by letting the browser report their position, or by dragging a pin. The library owns the whole round trip: the basemap's tile layer and its attribution obligations, the search-as-you-type discipline, and the single call that turns a coordinate into an address the user can confirm. A product that only offers raw latitude and longitude fields has not integrated this flow.",
+    "description": "A human chooses WHERE something is — a listing's address, a meeting point, a service area — by searching for it, by letting the browser report their position, or by dragging a pin. The library owns the whole round trip: the basemap's tile layer and its attribution obligations, the search-as-you-type discipline, and the single call that turns a coordinate into an address the user can confirm. It also owns the frame BEFORE the question is asked: the visitor's own address places the map coarsely, so a refused prompt costs a city rather than the whole map. A product that only offers raw latitude and longitude fields has not integrated this flow.",
     "description_key": "flow.geo.pick_location.description",
     "actors": [
       "Any user",
@@ -291,17 +291,30 @@
         ]
       },
       {
-        "kind": "human",
+        "kind": "http",
         "order": 2,
-        "note": "The user grants the browser's geolocation prompt, types an address, or drags the pin",
+        "note": "The visitor is placed from their own address, so the map opens somewhere real before anyone is asked for anything",
         "note_key": "flow.geo.pick_location.step.2.note",
+        "ref": "stapel_geo.ipgeo.views.IpLocationView.get",
+        "endpoints": [
+          {
+            "method": "GET",
+            "path": "/geo/api/v1/ip"
+          }
+        ]
+      },
+      {
+        "kind": "human",
+        "order": 3,
+        "note": "The user grants the browser's geolocation prompt, types an address, or drags the pin",
+        "note_key": "flow.geo.pick_location.step.3.note",
         "ref": ""
       },
       {
         "kind": "http",
-        "order": 3,
+        "order": 4,
         "note": "Search-as-you-type, biased to the map's own viewport",
-        "note_key": "flow.geo.pick_location.step.3.note",
+        "note_key": "flow.geo.pick_location.step.4.note",
         "ref": "stapel_geo.geocoding.views.GeocodeSearchView.get",
         "endpoints": [
           {
@@ -312,9 +325,9 @@
       },
       {
         "kind": "http",
-        "order": 4,
+        "order": 5,
         "note": "The detected position (or the dropped pin) becomes an address to confirm",
-        "note_key": "flow.geo.pick_location.step.4.note",
+        "note_key": "flow.geo.pick_location.step.5.note",
         "ref": "stapel_geo.geocoding.views.GeocodeResolveView.get",
         "endpoints": [
           {
@@ -325,16 +338,16 @@
       },
       {
         "kind": "human",
-        "order": 5,
+        "order": 6,
         "note": "The user confirms the address shown back, or picks one of the alternatives",
-        "note_key": "flow.geo.pick_location.step.5.note",
+        "note_key": "flow.geo.pick_location.step.6.note",
         "ref": ""
       },
       {
         "kind": "function",
-        "order": 6,
+        "order": 7,
         "note": "Server-rendered hosts read the same picker configuration by name",
-        "note_key": "flow.geo.pick_location.step.6.note",
+        "note_key": "flow.geo.pick_location.step.7.note",
         "ref": "geo.map_config"
       }
     ]

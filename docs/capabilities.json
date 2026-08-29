@@ -1,7 +1,7 @@
 {
   "module": "stapel-geo",
-  "version": "0.4.0",
-  "provides": "Geohash proximity search and geocoding, no GDAL/PostGIS/spatial database: a hierarchical location tree (flat lat/lon points with an auto-encoded geohash and a stable cross-service UUID), a proximity search facade (nearby/radius/bbox) behind one swappable backend, and a geocoder proxy (forward/structured/reverse) behind a provider merge-registry, throttled, cached and spend-ledgered per call.",
+  "version": "0.4.1",
+  "provides": "Geohash proximity search and geocoding, no GDAL/PostGIS/spatial database: a hierarchical location tree (flat lat/lon points with an auto-encoded geohash and a stable cross-service UUID), a proximity search facade (nearby/radius/bbox) behind one swappable backend, and a geocoder proxy (forward/structured/reverse) behind a provider merge-registry, throttled, cached and spend-ledgered per call, plus a coarse IP-geolocation verb behind its own provider registry, so a map opens on a real place before the browser's position prompt is answered.",
   "axes": [
     {
       "key": "SEARCH_BACKEND",
@@ -30,6 +30,20 @@
         "summary": "Default geocoding provider name, resolved through the GEOCODERS merge-registry (built-in photon/nominatim, or a registered name). google/yandex are key-gated stubs a host implements with its own PAYG keys (conf.py, MODULE.md 'Geocoder provider seam').",
         "business_label": "Default geocoding provider"
       }
+    },
+    {
+      "key": "IP_LOCATOR",
+      "kind": "enum",
+      "default": "maxmind",
+      "group": "geo.ipgeo",
+      "gates": {
+        "operations": [],
+        "co_gates": []
+      },
+      "curated": {
+        "summary": "Which locator places a visitor for GET api/v1/ip, through the IP_LOCATORS merge-registry (maxmind reads an offline .mmdb; static answers one configured point). No answer falls back to IP_FALLBACK_CENTER / MAP_DEFAULT_CENTER rather than failing.",
+        "business_label": "Visitor IP geolocation provider"
+      }
     }
   ],
   "extension_points": [
@@ -52,6 +66,16 @@
       "name": "serializer_seams",
       "kind": "class_override",
       "summary": "SerializerSeamMixin on geocoder views (response_serializer_class) and LocationViewSet (a plain DRF ModelViewSet, serializer_class/get_serializer_class) — subclass and remount to swap (views.py, geocoding/views.py, MODULE.md 'Serializer seams')."
+    },
+    {
+      "name": "IP_LOCATORS",
+      "kind": "merge_registry",
+      "summary": "MERGE registry ({name: dotted_path}) over BUILTIN_IP_LOCATORS (maxmind/static); None/'' removes a name. Implement IpLocator.locate(ip) -> IpLocation | None, where None means 'I do not know' and is a normal answer (ipgeo/providers.py)."
+    },
+    {
+      "name": "IP_CLIENT_IP_RESOLVER",
+      "kind": "dotted_path",
+      "summary": "REPLACE seam: request -> str | None, the whole proxy-trust decision. The default counts X-Forwarded-For from the RIGHT by IP_TRUSTED_PROXY_DEPTH, so a forged prefix is inert (ipgeo/client_ip.py)."
     }
   ],
   "surface": [
@@ -155,6 +179,34 @@
       "intent": "Sort any iterable of geohash-carrying candidates nearest-first against a target geohash (candidates without a geohash sort last). The building block for a custom STAPEL_GEO['SEARCH_BACKEND']: use it to rank your own candidate set instead of writing another haversine sort."
     },
     {
+      "name": "fallback_location",
+      "kind": "gate_function",
+      "path": "stapel_geo.ipgeo.service.fallback_location",
+      "intent": "The centre to open on when nothing is known about the caller — IP_FALLBACK_CENTER, or MAP_DEFAULT_CENTER when it is unset. Reach for it in a surface that needs the same 'no opinion' answer the IP verb gives, so the two cannot drift apart.",
+      "instead_of": [
+        "a second hardcoded default centre"
+      ]
+    },
+    {
+      "name": "get_ip_locator",
+      "kind": "gate_function",
+      "path": "stapel_geo.ipgeo.service.get_ip_locator",
+      "intent": "Resolve the configured IP locator by NAME through the IP_LOCATORS merge registry and instantiate it. Reach for it when you need the provider itself (a management command seeding a cache, a test); ordinary callers want locate_ip, which adds the cache and the fallback.",
+      "instead_of": [
+        "importing a locator class directly and pinning a provider"
+      ]
+    },
+    {
+      "name": "locate_ip",
+      "kind": "gate_function",
+      "path": "stapel_geo.ipgeo.service.locate_ip",
+      "intent": "Place a client IP coarsely, or return the deployment's fallback centre — the one call behind GET api/v1/ip. Never raises for input and never returns a location to store on a record: it exists so a map or a search opens somewhere real before the browser's position prompt is answered (or after it is refused). Reach for it server-side when a page needs a starting centre.",
+      "instead_of": [
+        "hardcoding a city centre in a frontend",
+        "calling a third-party IP-geolocation API from your own view"
+      ]
+    },
+    {
       "name": "get_backend",
       "kind": "factory",
       "path": "stapel_geo.search.__init__.get_backend",
@@ -206,7 +258,7 @@
       "intent": "Resolve a Location UUID to a summary dict for cross-service reference checks (returns {found: false, ...} on a miss, never raises) — the in-process equivalent of the geo.resolve comm Function. Use this instead of a bare Location.objects.filter(uuid=...).first() when another module just needs to validate/expand a stored location_id."
     }
   ],
-  "operations_total": 14,
+  "operations_total": 15,
   "requires": [
     {
       "module": "stapel-core",

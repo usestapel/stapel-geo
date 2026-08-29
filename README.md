@@ -10,7 +10,7 @@
 [![license](https://img.shields.io/github/license/usestapel/stapel-geo)](https://github.com/usestapel/stapel-geo/blob/main/LICENSE)
 [![llms.txt](https://img.shields.io/badge/llms.txt-blue)](https://github.com/usestapel/stapel-geo/blob/main/docs/llms.txt)
 
-> Geohash proximity search and geocoding, no GDAL/PostGIS/spatial database: a hierarchical location tree (flat lat/lon points with an auto-encoded geohash and a stable cross-service UUID), a proximity search facade (nearby/radius/bbox) behind one swappable backend, and a geocoder proxy (forward/structured/reverse) behind a provider merge-registry, throttled, cached and spend-ledgered per call.
+> Geohash proximity search and geocoding, no GDAL/PostGIS/spatial database: a hierarchical location tree (flat lat/lon points with an auto-encoded geohash and a stable cross-service UUID), a proximity search facade (nearby/radius/bbox) behind one swappable backend, and a geocoder proxy (forward/structured/reverse) behind a provider merge-registry, throttled, cached and spend-ledgered per call, plus a coarse IP-geolocation verb behind its own provider registry, so a map opens on a real place before the browser's position prompt is answered.
 
 Part of the [Stapel framework](https://github.com/usestapel) — composable Django apps that deploy as a monolith or as microservices without changing module code.
 
@@ -24,12 +24,12 @@ pip install stapel-geo
 
 | Fact | Value |
 |---|---|
-| Version | `0.4.0` |
+| Version | `0.4.1` |
 | Python | `>=3.11` (3.11, 3.12, 3.13, 3.14) |
-| HTTP operations | 16 |
-| Config axes | 2 |
-| Usage surface | 21 |
-| Extension points | 4 |
+| HTTP operations | 17 |
+| Config axes | 3 |
+| Usage surface | 24 |
+| Extension points | 6 |
 | Error codes | 50 |
 | Documented flows | 5 |
 | Fleet dependencies | [`stapel-core`](https://github.com/usestapel/stapel-core) |
@@ -67,6 +67,15 @@ pip install stapel-geo
     envelope, the operating bbox and the debounce discipline.
 
   The React pair builds against `docs/frontend-contract.md`.
+- **Where to open the map before anyone is asked** — `ip` (public) places
+  the visitor from the address their request arrived on, so a picker
+  opens on a city while the browser's geolocation prompt is still
+  unanswered, or after it was refused. Offline `maxmind` database or a
+  single configured `static` point, behind the same kind of provider
+  registry as the geocoder, with the map's own default centre as the
+  floor under both. Coarse on purpose: city-at-best, wrong on a VPN or a
+  carrier NAT, and `source`/`precision`/`ip_resolved` come back with the
+  point so a UI never presents a guess as the user's address.
 - **comm surface** — `geo.nearby` / `geo.radius` / `geo.bbox` /
   `geo.geohash_encode` / `geo.resolve` / `geo.geocode` /
   `geo.reverse_geocode` / `geo.map_config`: consumers (listings,
@@ -76,6 +85,7 @@ pip install stapel-geo
 
 ```bash
 pip install "stapel-geo[redis]"  # + the Redis search backend
+pip install "stapel-geo[ipgeo]"  # + the offline MaxMind reader for `ip`
 ```
 
 ```python
@@ -108,6 +118,7 @@ Plain `manage.py migrate` — any Django database backend works.
 | `geocoding/reverse?lat=&lon=` | Reverse geocoding (raw candidates) |
 | `geocoding/resolve?lat=&lon=` | **One coordinate pair → one confirmable place** |
 | `map/config` | Basemap + picker configuration (**public**) |
+| `ip` | Where the caller appears to be, for the map's opening centre (**public**, throttled) |
 
 ## Settings (`STAPEL_GEO`)
 
@@ -133,6 +144,16 @@ Plain `manage.py migrate` — any Django database backend works.
 | `MAP_TILE_URL` / `MAP_TILE_ATTRIBUTION_*` | OSM public tiles / OSM credit | Basemap and its **mandatory** attribution. The default tile server is a dev default (`W007`). |
 | `MAP_BBOX` | `None` | The product's operating area; also the default hard restriction on forward geocoding. |
 | `MAP_*` (zoom, centre, debounce) | see `CONFIG.MD` | The rest of the picker's configuration. |
+| `IP_LOCATOR` | `"maxmind"` | Default IP locator **name** (registry key). |
+| `IP_LOCATORS` | `{}` | Extra locators, merged over the built-ins (`None` removes). |
+| `IP_MAXMIND_DB` | `""` | Path to your own offline GeoLite2/GeoIP2 City `.mmdb`. Nothing is bundled — MaxMind forbids redistributing it. |
+| `IP_STATIC_POINT` / `IP_STATIC_LABEL` / `IP_STATIC_PRECISION` | `None` / `""` / `"city"` | The `static` locator's one answer for everybody — a single-city product's honest one. |
+| `IP_FALLBACK_CENTER` / `IP_FALLBACK_LABEL` | `None` / `""` | Where to open when the locator has nothing. Unset, `MAP_DEFAULT_CENTER` answers. |
+| `IP_TRUSTED_PROXY_DEPTH` | `0` | How many proxies you own. `0` = `REMOTE_ADDR` only; **`1` behind one nginx**. Counted from the right of `X-Forwarded-For`, so a forged prefix is inert (`W010`). |
+| `IP_CLIENT_IP_RESOLVER` | `…ipgeo.client_ip.client_ip_from_request` | The whole client-address decision as one function (seam). |
+| `IP_PERMISSIONS` | `[AllowAny]` | Guard of the `ip` endpoint — open by design: the caller has no account yet. |
+| `IP_THROTTLE` / `IP_ANON_THROTTLE` | `120/min` / `60/min` | Scoped throttle rates (scope `geo_ip`); the anonymous one is the live one here. |
+| `IP_CACHE_TTL_S` | `3600` | How long one address's answer is cached (`0` disables). |
 
 > **Sending `lang`?** Send `default`, or nothing. `PHOTON_LANGUAGES` is
 > what the index on disk carries, and Photon refuses anything else with
@@ -144,6 +165,14 @@ Plain `manage.py migrate` — any Django database backend works.
 > from the JSON dump with `photon.jar import -languages …`; listing it
 > here **without** rebuilding turns every request into a 502.
 > `manage.py check` says all of this (`stapel_geo.W005`/`W006`).
+
+> **Behind a proxy?** Set `IP_TRUSTED_PROXY_DEPTH` to the number of hops
+> you actually own (`1` behind a single nginx). Leave it at `0` there and
+> every visitor geolocates to your proxy; raise it past what you own and
+> a caller picks their own IP by typing an `X-Forwarded-For` header. The
+> chain `X-Forwarded-For ++ [REMOTE_ADDR]` is counted from the **right**,
+> which is what keeps a forged prefix inert. `manage.py check` says this
+> too (`stapel_geo.W008`/`W009`/`W010`).
 
 ## comm Functions
 
@@ -172,6 +201,13 @@ truth; `post_save`/`post_delete` keep it in sync and
 engine — see `MODULE.md`.
 
 ## Extension points
+
+Swappable from settings, no fork: the search backend (`SEARCH_BACKEND`),
+the geocoder registry (`GEOCODERS` / `GEOCODER`), the geocode cache
+(`GEOCODE_CACHE_POLICY`), the display line (`ADDRESS_FORMATTER`), the IP
+locator registry (`IP_LOCATORS` / `IP_LOCATOR` — same merge semantics as
+the geocoders'), and which address a request came from
+(`IP_CLIENT_IP_RESOLVER`, the proxy-trust decision as one function).
 
 See [MODULE.md](https://github.com/usestapel/stapel-geo/blob/main/MODULE.md) — the agent-facing map of every fork-free seam, and
 [CHANGELOG.md](https://github.com/usestapel/stapel-geo/blob/main/CHANGELOG.md) — including what 0.3.0 removed and why.

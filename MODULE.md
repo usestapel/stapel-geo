@@ -41,6 +41,19 @@
     discipline, and the endpoint paths. The frontend reads its
     configuration instead of hardcoding it.
   - The React pair's contract is `docs/frontend-contract.md`.
+- **IP geolocation** (`ipgeo/`, 0.4.1 — the frame BEFORE the question is
+  asked): `GET /geo/api/v1/ip` answers where the caller probably is from
+  the one fact a request carries anyway — its own address — so a picker
+  opens on a city instead of on `{0, 0}` while the browser's geolocation
+  prompt is still unanswered, or after it was refused. **Public**,
+  throttled (scope `geo_ip`), cached per address, and honest in-band:
+  `source` / `precision` / `ip_resolved` separate "we think you are in
+  Moscow" from "we have no idea, here is where this site lives". Two
+  built-in locators behind a merge-registry — `maxmind` (an offline
+  `.mmdb`, no third party told who visits) and `static` (one configured
+  point) — with `IP_FALLBACK_CENTER`/`MAP_DEFAULT_CENTER` as the floor
+  under both. City-at-best by nature: wrong for a VPN, wrong for a
+  carrier NAT, never a location to store on a record.
 - **comm surface**: Functions `geo.nearby` / `geo.radius` / `geo.bbox` /
   `geo.geohash_encode` / `geo.resolve` / `geo.geocode` /
   `geo.reverse_geocode` / `geo.map_config` (consumers query geo by name,
@@ -49,7 +62,7 @@
   human address onto a row it only has coordinates for).
 - **HTTP canon**: the host mounts `path("geo/", include("stapel_geo.urls"))`
   → `/geo/api/v1/locations/...` + `/geo/api/v1/geocoding/...` +
-  `/geo/api/v1/map/config`
+  `/geo/api/v1/map/config` + `/geo/api/v1/ip`
   (api-versioning.md: the version segment is part of the contract; v1
   patterns live in `urls_v1.py`, a future v2 mounts alongside).
 - **Contract triad**: committed `docs/{schema,flows,errors}.json`
@@ -72,6 +85,12 @@ var → default. Read lazily at call time. Full key table: README.md.
 | Display line | `ADDRESS_FORMATTER` (dotted path) | **REPLACE** |
 | Basemap / picker | `MAP_*` (see CONFIG.MD) | plain values, read at call time |
 | Photon language | `PHOTON_LANGUAGES` + `PHOTON_LANGUAGE_FALLBACK` | see below — a statement of fact about the index, not a preference |
+| IP locator default | `IP_LOCATOR` (a **name**) | picks from the registry |
+| IP locator registry | `IP_LOCATORS` (`{name: dotted_path}`) | **MERGE** over `BUILTIN_IP_LOCATORS`; `None`/`""` removes |
+| Client address | `IP_CLIENT_IP_RESOLVER` (dotted path) | **REPLACE** — the proxy-trust decision, see below |
+| Proxy trust | `IP_TRUSTED_PROXY_DEPTH` | how many hops the deployment owns; `0` = `REMOTE_ADDR` only |
+| IP endpoint guard | `IP_PERMISSIONS` (dotted paths) | **REPLACE** — default is `AllowAny`, deliberately |
+| IP locator data / floor | `IP_MAXMIND_DB`, `IP_STATIC_POINT`/`_LABEL`/`_PRECISION`, `IP_FALLBACK_CENTER`/`_LABEL`, `IP_THROTTLE`, `IP_ANON_THROTTLE`, `IP_CACHE_TTL_S` | plain values (see CONFIG.MD) |
 
 ### Search backend seam — `SEARCH_BACKEND` (`search/base.py`)
 
@@ -138,6 +157,78 @@ within `GEOCODE_CACHE_TTL_DAYS`. The **ledger row is written on every
 call regardless** (ok / error / cache_hit + duration_ms) — caching is a
 read seam, accounting is not optional (the PromptLog pattern).
 
+### IP locator seam — the registry (`ipgeo/providers.py`)
+
+`BUILTIN_IP_LOCATORS = {maxmind, static}`, and the registry semantics are
+the geocoder's one namespace over: `registered_ip_locators()` =
+built-ins ← the `IP_LOCATORS` setting ← `register_ip_locator()` runtime
+registrations, with `IP_LOCATOR` naming the default.
+
+```python
+from stapel_geo.ipgeo import IpLocator
+
+class AcmeIpLocator(IpLocator):
+    name = "acme"
+    def locate(self, ip): ...   # -> IpLocation | None
+
+STAPEL_GEO = {"IP_LOCATORS": {"acme": "myproject.geo.AcmeIpLocator"},
+              "IP_LOCATOR": "acme"}
+# or at runtime: stapel_geo.ipgeo.register_ip_locator("acme", "myproject.geo.AcmeIpLocator")
+```
+
+Contract, and the two halves of it that are easy to get wrong:
+
+- **`None` is a return value, not a failure.** A private address, a range
+  the database has never heard of, a loopback request in development —
+  each is the normal case somewhere, and the service answers them with
+  the configured fallback centre.
+- `IpLocatorError` is for a genuinely broken backend (a missing database,
+  an unreachable upstream). The service catches it, logs it and *still*
+  falls back: a map that will not open is a worse outcome than a map that
+  opens in the wrong city. Nothing here reaches the caller as a 5xx.
+
+Read config lazily via `geo_settings`; locators are instantiated per call,
+exactly like geocoders. `maxmind` needs the optional `geoip2` package
+(`pip install "stapel-geo[ipgeo]"`) and a database file the host brings
+itself — MaxMind requires an account to download GeoLite2 and forbids
+redistributing it, so `IP_MAXMIND_DB` has no default and nothing is
+bundled. Its reader is opened once per path and cached for the process
+(re-opening the mmap per request would cost a page load every page load).
+`checks.W008` warns on an unresolvable locator, `W009` when the
+configured one has nothing to answer with **and** no fallback centre
+exists — the case where the endpoint 204s at everybody while looking
+perfectly healthy.
+
+### Which address the request came from — `IP_TRUSTED_PROXY_DEPTH` / `IP_CLIENT_IP_RESOLVER`
+
+This is a security decision wearing a lookup's clothes. `X-Forwarded-For`
+is written by whoever is in front of you and **anyone can send one**, so
+reading its leftmost entry — the idiom every snippet on the internet
+shows — lets a caller choose their own IP by typing it, which for an
+IP-geolocated or IP-throttled endpoint is the whole ballgame.
+
+The default is therefore `REMOTE_ADDR` and nothing else, and trusting a
+header at all is an explicit statement of topology:
+`IP_TRUSTED_PROXY_DEPTH` is **how many hops the deployment owns**. The
+chain considered is `X-Forwarded-For ++ [REMOTE_ADDR]` and the client is
+the entry `depth` places from its **right** end — `0` direct to gunicorn
+(the default), `1` behind one nginx, `2` behind nginx behind a CDN.
+Counting from the right is what makes a forged prefix inert: a caller may
+prepend as many entries as they like and none of them is ever the one
+that gets read.
+
+A topology the depth counter does not describe replaces the whole
+function rather than accumulating header settings:
+
+```python
+STAPEL_GEO = {"IP_CLIENT_IP_RESOLVER": "myproject.net.client_ip"}  # request -> str | None
+```
+
+`checks.W010` fires when the site has told Django it is behind a proxy
+(`USE_X_FORWARDED_HOST` or `SECURE_PROXY_SSL_HEADER`) while the depth is
+still `0` — the configuration in which every visitor geolocates to the
+proxy and the endpoint looks like it is working.
+
 ### The Photon language trap (read before configuring a non-en/de/fr product)
 
 `PHOTON_LANGUAGES` is **not a preference list** — it is a statement of
@@ -174,6 +265,15 @@ subclass for per-verb rates.
 render until the visitor logs in is not a map, and the payload is
 configuration the product publishes anyway.
 
+`/geo/api/v1/ip` is `AllowAny` for the same reason and one stronger: the
+caller is a visitor who has no account yet, which is the entire situation
+the endpoint exists for. `IP_PERMISSIONS` is the seam if a deployment
+disagrees. Its brake is `ipgeo/views.py:IpGeoThrottle` (scope `"geo_ip"`,
+`IP_THROTTLE` / `IP_ANON_THROTTLE`), and here the **anonymous** rate is
+the live one — the endpoint is cheap on an offline database and is not
+cheap on a metered upstream a host may swap in, so the brake ships with
+the library rather than with the provider.
+
 ### Serializer seams (`views.py`, `geocoding/views.py`)
 
 `stapel_core.django.api.views.StapelAPIView` (core 0.41+) is the canon —
@@ -200,6 +300,16 @@ subclass and remount.
   the integration is unfinished — the default skin is a map plus an
   address search, and everything it needs is answerable from this
   library (`docs/frontend-contract.md`).
+- **Do not store the IP-derived point on a record, or show it as the
+  user's address.** `GET …/ip` answers where to *open a map*, and its
+  input is the address a packet arrived from: city-at-best where it is
+  right at all, the VPN's exit node for anyone on a VPN, and a national
+  gateway for a whole mobile carrier. Persisting it stamps a listing with
+  a place nobody chose, and rendering it as "your location" tells the
+  user a fact the server does not have. It is a starting frame the human
+  then corrects — `precision` / `ip_resolved` are in the payload so a UI
+  can say which it is holding. What gets saved is what the person
+  confirmed through `geocoding/resolve`.
 - **Do not drop the tile attribution.** `map/config` returns it and flags
   it `requires_attribution`; it is a licence obligation of the OSM data,
   not a design choice. Nor should a product ship on the OSM Foundation's

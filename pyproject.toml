@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "stapel-geo"
-version = "0.4.0"
+version = "0.4.1"
 description = "Geohash proximity search and geocoding for the Stapel framework — no GDAL, no PostGIS"
 readme = "README.md"
 license = { text = "MIT" }
@@ -44,7 +44,11 @@ Issues = "https://github.com/usestapel/stapel-geo/issues"
 # dependency (the default Postgres backend needs nothing extra).
 [project.optional-dependencies]
 redis = ["redis>=4.2"]
-all = ["stapel-geo[redis]"]
+# The offline MaxMind/GeoLite2 reader behind the "maxmind" IP locator. Not a
+# hard dependency: a deployment can use the "static" locator, its own
+# provider, or nothing at all and let the fallback centre answer.
+ipgeo = ["geoip2>=4.7"]
+all = ["stapel-geo[redis,ipgeo]"]
 
 [tool.setuptools]
 package-dir = {"stapel_geo" = "."}
@@ -52,6 +56,7 @@ packages = [
     "stapel_geo",
     "stapel_geo.migrations",
     "stapel_geo.geocoding",
+    "stapel_geo.ipgeo",
     "stapel_geo.search",
 ]
 
