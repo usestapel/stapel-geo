@@ -57,8 +57,22 @@ class Location(TreeNodeModel):
             return self.name or ""
         return f"{self._short_name(parent)} - {self.name or ''}"
 
+    def _ancestors_root_first(self) -> list:
+        """The parent chain, root first, read through ``tn_parent``.
+
+        Not ``get_ancestors()``: that reads treenode's ``tn_ancestors_pks``
+        and its process-wide tree cache, which are refreshed after save and
+        can describe a different row that once had this pk.
+        """
+        chain, seen, node = [], set(), self.tn_parent
+        while node is not None and node.pk not in seen:
+            seen.add(node.pk)
+            chain.append(node)
+            node = node.tn_parent
+        return chain[::-1]
+
     def _compute_display_name_broad(self) -> str:
-        ancestors = list(self.get_ancestors())
+        ancestors = self._ancestors_root_first()
         if not ancestors:
             return self.name or ""
         if len(ancestors) == 1:

@@ -24,13 +24,13 @@ pip install stapel-geo
 
 | Fact | Value |
 |---|---|
-| Version | `0.4.1` |
+| Version | `0.4.2` |
 | Python | `>=3.11` (3.11, 3.12, 3.13, 3.14) |
 | HTTP operations | 17 |
 | Config axes | 3 |
 | Usage surface | 24 |
 | Extension points | 6 |
-| Error codes | 50 |
+| Error codes | 51 |
 | Documented flows | 5 |
 | Fleet dependencies | [`stapel-core`](https://github.com/usestapel/stapel-core) |
 

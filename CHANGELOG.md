@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.4.2] — 2026-11-20
+
+Patch. No migration. Requires stapel-core 0.99.3.
+
+- **Contract profile 2:** `docs/schema.v2.json` beside the unchanged-profile
+  `docs/schema.json`, for a native client generator; `make contract-check`
+  runs in CI.
+- `errors.json` regenerated under stapel-core 0.99.3 (`error.429.rate_limit`
+  text and params, `param_types`, core's `error.400.too_many_ids`).
+- Gates: `tests/test_contract_profile2.py` on stapel-tools 0.84.0's
+  `contract_gates` (profile 2 of the same surface, bound codes from
+  `errors.json`, every example valid, no dead `@action` declaration).
+- Fixed: the `MapConfig` example lacked `tiles` and `endpoints` (it failed
+  its own schema); it is now a complete payload.
+- Fixed: `display_name_broad` read treenode's cached ancestor list, which
+  could describe an earlier row with the same pk; it walks `tn_parent` now
+  (the order-dependent failure of `test_display_names_from_hierarchy`).
+- Detail operations bind `error.404.not_found`.
+
 All notable changes to stapel-geo are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Pre-1.0 semver: **minor = breaking**, patch = compatible.

@@ -25,7 +25,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Optional
 
-from drf_spectacular.utils import extend_schema
+from drf_spectacular.utils import OpenApiExample, extend_schema
 from rest_framework.permissions import AllowAny
 from stapel_core.django.api.serializers import StapelDataclassSerializer
 from stapel_core.django.api.views import StapelAPIView
@@ -145,6 +145,33 @@ class MapConfigView(StapelAPIView):
     @extend_schema(
         summary="Basemap and location-picker configuration",
         responses={200: MapConfigSerializer},
+        examples=[
+            OpenApiExample(
+                "MapConfig",
+                response_only=True,
+                value={
+                    "tiles": {
+                        "url_template": "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+                        "subdomains": [],
+                        "attribution_html": "&copy; OpenStreetMap contributors",
+                        "attribution_text": "© OpenStreetMap contributors",
+                        "policy_url": "https://operations.osmfoundation.org/policies/tiles/",
+                        "requires_attribution": True,
+                        "min_zoom": 2,
+                        "max_zoom": 19,
+                    },
+                    "default_center": [55.7558, 37.6173],
+                    "default_zoom": 13,
+                    "picked_zoom": 17,
+                    "bbox": None,
+                    "geolocation": True,
+                    "search_min_chars": 3,
+                    "search_debounce_ms": 350,
+                    "geohash_precision": 8,
+                    "endpoints": ENDPOINTS,
+                },
+            )
+        ],
     )
     @flow_step(PICK_LOCATION, order=1,
                note="The picker loads its tile layer, attribution and search discipline")

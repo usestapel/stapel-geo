@@ -1,8 +1,8 @@
-# stapel-geo 0.4.1
+# stapel-geo 0.4.2
 
 Geohash proximity search and geocoding, no GDAL/PostGIS/spatial database: a hierarchical location tree (flat lat/lon points with an auto-encoded geohash and a stable cross-service UUID), a proximity search facade (nearby/radius/bbox) behind one swappable backend, and a geocoder proxy (forward/structured/reverse) behind a provider merge-registry, throttled, cached and spend-ledgered per call, plus a coarse IP-geolocation verb behind its own provider registry, so a map opens on a real place before the browser's position prompt is answered.
 
-Contract: axes 3 · surface 24 · extension points 6 · operations 17 · error codes 50 · flows 5.
+Contract: axes 3 · surface 24 · extension points 6 · operations 17 · error codes 51 · flows 5.
 Generated from docs/capabilities.json by `stapel-llms-txt` — do not edit; drift-gated by `make contract-check`.
 
 ## Configuration axes — what a product switches on
@@ -117,7 +117,7 @@ Paths are relative to `/geo/api/v1/`.
 - GET /ip — geo_api_v1_ip_retrieve
 - GET /map/config — geo_api_v1_map_config_retrieve
 
-## Error codes (50) — the StapelError envelope
+## Error codes (51) — the StapelError envelope
 Render `t(code, params)`; branch UX on the remediation. Localized text lives in docs/errors.<lang>.md, not here.
 - error.400.bad_request [400] fix_input
 - error.400.captcha_invalid [400] retry
@@ -141,6 +141,7 @@ Render `t(code, params)`; branch UX on the remediation. Localized text lives in 
 - error.400.invalid_import_status [400] fix_input
 - error.400.invalid_params [400] fix_input
 - error.400.lat_lon_required [400] fix_input
+- error.400.too_many_ids [400] fix_input {requested,limit}
 - error.400.uuid_required [400] fix_input
 - error.400.validation_error [400] fix_input
 - error.400.verification_failed [400] verify
@@ -164,7 +165,7 @@ Render `t(code, params)`; branch UX on the remediation. Localized text lives in 
 - error.422.unprocessable_entity [422] wait_and_retry
 - error.423.locked [423] wait_and_retry
 - error.423.verification_locked [423] wait_and_retry
-- error.429.rate_limit [429] wait_and_retry {retry_after_minutes}
+- error.429.rate_limit [429] wait_and_retry {retry_after_display,retry_after,retry_after_minutes}
 - error.429.too_many_requests [429] wait_and_retry
 - error.500.internal [500] contact_support
 - error.502.geocoder_unavailable [502] retry

@@ -1,0 +1,2012 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "",
+    "version": "0.0.0",
+    "x-stapel-contract": 2
+  },
+  "paths": {
+    "/geo/api/v1/geocoding/resolve": {
+      "get": {
+        "operationId": "geo_api_v1_geocoding_resolve_retrieve",
+        "description": "One coordinate pair in, one confirmable place out.\n\nThe endpoint the browser's ``navigator.geolocation`` result goes\nstraight to, and the one a dragged map pin goes to on drop. It answers\nwith the display line, the address components, the geohash to store\nand the runner-up candidates — everything a \"is this your address?\"\nconfirmation step renders, in one round trip.",
+        "summary": "Resolve a coordinate pair to a confirmable place",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "lang",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "lat",
+            "schema": {
+              "type": "number",
+              "format": "float"
+            },
+            "required": true
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer"
+            },
+            "description": "Candidates to consider (1 pick + alternatives)."
+          },
+          {
+            "in": "query",
+            "name": "lon",
+            "schema": {
+              "type": "number",
+              "format": "float"
+            },
+            "required": true
+          },
+          {
+            "in": "query",
+            "name": "nearest",
+            "schema": {
+              "type": "integer"
+            },
+            "description": "Also return N nearest known Location rows (0 = none)."
+          },
+          {
+            "in": "query",
+            "name": "radius_km",
+            "schema": {
+              "type": "number",
+              "format": "float"
+            }
+          }
+        ],
+        "tags": [
+          "Geocoding"
+        ],
+        "security": [
+          {
+            "JWTCookieAuth": []
+          },
+          {
+            "JWTBearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlaceResolution"
+                },
+                "examples": {
+                  "PlaceResolution": {
+                    "value": {
+                      "lat": 52.51667,
+                      "lon": 13.38333,
+                      "geohash": "u33dc0cp",
+                      "lang": "default",
+                      "formatted": "Unter den Linden, 1, Berlin, Germany"
+                    }
+                  }
+                }
+              }
+            },
+            "description": ""
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StapelError"
+                }
+              }
+            },
+            "description": "Bad Request",
+            "x-stapel-errors": [
+              "error.400.invalid_params",
+              "error.400.lat_lon_required"
+            ]
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StapelError"
+                }
+              }
+            },
+            "description": "Bad Gateway",
+            "x-stapel-errors": [
+              "error.502.geocoder_unavailable"
+            ]
+          }
+        },
+        "x-stapel-flows": [
+          "geo.geocode_address",
+          "geo.pick_location"
+        ]
+      }
+    },
+    "/geo/api/v1/geocoding/reverse": {
+      "get": {
+        "operationId": "geo_api_v1_geocoding_reverse_retrieve",
+        "description": "Reverse geocoding — coordinates to address.",
+        "summary": "Reverse geocode coordinates",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "lang",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "lat",
+            "schema": {
+              "type": "number",
+              "format": "float"
+            },
+            "required": true
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "lon",
+            "schema": {
+              "type": "number",
+              "format": "float"
+            },
+            "required": true
+          },
+          {
+            "in": "query",
+            "name": "radius_km",
+            "schema": {
+              "type": "number",
+              "format": "float"
+            },
+            "description": "How far the provider may look for a match."
+          }
+        ],
+        "tags": [
+          "Geocoding"
+        ],
+        "security": [
+          {
+            "JWTCookieAuth": []
+          },
+          {
+            "JWTBearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GeocodeResponse"
+                },
+                "examples": {
+                  "GeocodeResponse": {
+                    "value": {
+                      "type": "FeatureCollection",
+                      "lang": "default"
+                    }
+                  }
+                }
+              }
+            },
+            "description": ""
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StapelError"
+                }
+              }
+            },
+            "description": "Bad Request",
+            "x-stapel-errors": [
+              "error.400.invalid_params",
+              "error.400.lat_lon_required"
+            ]
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StapelError"
+                }
+              }
+            },
+            "description": "Bad Gateway",
+            "x-stapel-errors": [
+              "error.502.geocoder_unavailable"
+            ]
+          }
+        },
+        "x-stapel-flows": [
+          "geo.geocode_address"
+        ]
+      }
+    },
+    "/geo/api/v1/geocoding/search": {
+      "get": {
+        "operationId": "geo_api_v1_geocoding_search_retrieve",
+        "description": "Forward geocoding — search places by free-text query.",
+        "summary": "Search places by text",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "bbox",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Hard restriction 'min_lon,min_lat,max_lon,max_lat'; defaults to STAPEL_GEO['MAP_BBOX']."
+          },
+          {
+            "in": "query",
+            "name": "bias_lat",
+            "schema": {
+              "type": "number",
+              "format": "float"
+            },
+            "description": "Soft bias latitude (the map's centre)."
+          },
+          {
+            "in": "query",
+            "name": "bias_lon",
+            "schema": {
+              "type": "number",
+              "format": "float"
+            },
+            "description": "Soft bias longitude (the map's centre)."
+          },
+          {
+            "in": "query",
+            "name": "bias_scale",
+            "schema": {
+              "type": "number",
+              "format": "float"
+            },
+            "description": "Bias strength, 0.0-1.0."
+          },
+          {
+            "in": "query",
+            "name": "lang",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Search query",
+            "required": true
+          },
+          {
+            "in": "query",
+            "name": "zoom",
+            "schema": {
+              "type": "integer"
+            },
+            "description": "Map zoom the bias is scaled against."
+          }
+        ],
+        "tags": [
+          "Geocoding"
+        ],
+        "security": [
+          {
+            "JWTCookieAuth": []
+          },
+          {
+            "JWTBearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GeocodeResponse"
+                },
+                "examples": {
+                  "GeocodeResponse": {
+                    "value": {
+                      "type": "FeatureCollection",
+                      "lang": "default"
+                    }
+                  }
+                }
+              }
+            },
+            "description": ""
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StapelError"
+                }
+              }
+            },
+            "description": "Bad Request",
+            "x-stapel-errors": [
+              "error.400.invalid_bbox",
+              "error.400.invalid_params",
+              "error.400.lat_lon_required"
+            ]
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StapelError"
+                }
+              }
+            },
+            "description": "Bad Gateway",
+            "x-stapel-errors": [
+              "error.502.geocoder_unavailable"
+            ]
+          }
+        },
+        "x-stapel-flows": [
+          "geo.geocode_address",
+          "geo.pick_location"
+        ]
+      }
+    },
+    "/geo/api/v1/geocoding/structured": {
+      "get": {
+        "operationId": "geo_api_v1_geocoding_structured_retrieve",
+        "description": "Structured address search — search by address components.",
+        "summary": "Structured address search",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "city",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "countrycode",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "lang",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "postcode",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "street",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "tags": [
+          "Geocoding"
+        ],
+        "security": [
+          {
+            "JWTCookieAuth": []
+          },
+          {
+            "JWTBearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GeocodeResponse"
+                },
+                "examples": {
+                  "GeocodeResponse": {
+                    "value": {
+                      "type": "FeatureCollection",
+                      "lang": "default"
+                    }
+                  }
+                }
+              }
+            },
+            "description": ""
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StapelError"
+                }
+              }
+            },
+            "description": "Bad Gateway",
+            "x-stapel-errors": [
+              "error.502.geocoder_unavailable"
+            ]
+          }
+        },
+        "x-stapel-flows": [
+          "geo.geocode_address"
+        ]
+      }
+    },
+    "/geo/api/v1/ip": {
+      "get": {
+        "operationId": "geo_api_v1_ip_retrieve",
+        "description": "A coarse, city-at-best guess derived from the caller's own IP address, for opening a map before the browser's geolocation prompt has been answered — or after it was refused. Never a location to store on a record. Answers 200 with the deployment's fallback centre (`ip_resolved: false`) when the address cannot be placed, and 204 when the deployment has configured no fallback centre either.",
+        "summary": "Where the calling client appears to be",
+        "tags": [
+          "Map"
+        ],
+        "security": [
+          {
+            "JWTCookieAuth": []
+          },
+          {
+            "JWTBearerAuth": []
+          },
+          {}
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IpLocation"
+                },
+                "examples": {
+                  "IpLocation": {
+                    "value": {
+                      "lat": 55.7558,
+                      "lon": 37.6173,
+                      "source": "maxmind",
+                      "precision": "city",
+                      "ip_resolved": true,
+                      "label": "Moscow, Russia",
+                      "city": "Moscow",
+                      "region": "Moscow",
+                      "country": "Russia",
+                      "country_code": "RU",
+                      "accuracy_radius_km": 20
+                    }
+                  }
+                }
+              }
+            },
+            "description": ""
+          },
+          "204": {
+            "description": "No response body"
+          }
+        },
+        "x-stapel-flows": [
+          "geo.pick_location"
+        ]
+      }
+    },
+    "/geo/api/v1/locations/": {
+      "get": {
+        "operationId": "geo_api_v1_locations_list",
+        "summary": "List and search locations",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer"
+            },
+            "description": "Max results (default 10, max 50)."
+          },
+          {
+            "in": "query",
+            "name": "search",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Search query (min 2 chars) on location name."
+          }
+        ],
+        "tags": [
+          "Locations"
+        ],
+        "security": [
+          {
+            "JWTCookieAuth": []
+          },
+          {
+            "JWTBearerAuth": []
+          },
+          {}
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/LocationCompact"
+                  }
+                }
+              }
+            },
+            "description": ""
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StapelError"
+                }
+              }
+            },
+            "description": "Bad Request",
+            "x-stapel-errors": [
+              "error.400.invalid_params"
+            ]
+          }
+        },
+        "description": "**Permissions:** `ReadOnlyOrSuperUser`"
+      },
+      "post": {
+        "operationId": "geo_api_v1_locations_create",
+        "tags": [
+          "Locations"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Location"
+              }
+            },
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "$ref": "#/components/schemas/Location"
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Location"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "JWTCookieAuth": []
+          },
+          {
+            "JWTBearerAuth": []
+          }
+        ],
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Location"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "description": "**Permissions:** `ReadOnlyOrSuperUser`"
+      }
+    },
+    "/geo/api/v1/locations/{id}/": {
+      "get": {
+        "operationId": "geo_api_v1_locations_retrieve",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "schema": {
+              "type": "integer"
+            },
+            "description": "A unique integer value identifying this location.",
+            "required": true
+          }
+        ],
+        "tags": [
+          "Locations"
+        ],
+        "security": [
+          {
+            "JWTCookieAuth": []
+          },
+          {
+            "JWTBearerAuth": []
+          },
+          {}
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Location"
+                }
+              }
+            },
+            "description": ""
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StapelError"
+                }
+              }
+            },
+            "description": "Not Found",
+            "x-stapel-errors": [
+              "error.404.not_found"
+            ]
+          }
+        },
+        "description": "**Permissions:** `ReadOnlyOrSuperUser`"
+      },
+      "put": {
+        "operationId": "geo_api_v1_locations_update",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "schema": {
+              "type": "integer"
+            },
+            "description": "A unique integer value identifying this location.",
+            "required": true
+          }
+        ],
+        "tags": [
+          "Locations"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Location"
+              }
+            },
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "$ref": "#/components/schemas/Location"
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Location"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "JWTCookieAuth": []
+          },
+          {
+            "JWTBearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Location"
+                }
+              }
+            },
+            "description": ""
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StapelError"
+                }
+              }
+            },
+            "description": "Not Found",
+            "x-stapel-errors": [
+              "error.404.not_found"
+            ]
+          }
+        },
+        "description": "**Permissions:** `ReadOnlyOrSuperUser`"
+      },
+      "patch": {
+        "operationId": "geo_api_v1_locations_partial_update",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "schema": {
+              "type": "integer"
+            },
+            "description": "A unique integer value identifying this location.",
+            "required": true
+          }
+        ],
+        "tags": [
+          "Locations"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PatchedLocation"
+              }
+            },
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "$ref": "#/components/schemas/PatchedLocation"
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/PatchedLocation"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "JWTCookieAuth": []
+          },
+          {
+            "JWTBearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Location"
+                }
+              }
+            },
+            "description": ""
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StapelError"
+                }
+              }
+            },
+            "description": "Not Found",
+            "x-stapel-errors": [
+              "error.404.not_found"
+            ]
+          }
+        },
+        "description": "**Permissions:** `ReadOnlyOrSuperUser`"
+      },
+      "delete": {
+        "operationId": "geo_api_v1_locations_destroy",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "schema": {
+              "type": "integer"
+            },
+            "description": "A unique integer value identifying this location.",
+            "required": true
+          }
+        ],
+        "tags": [
+          "Locations"
+        ],
+        "security": [
+          {
+            "JWTCookieAuth": []
+          },
+          {
+            "JWTBearerAuth": []
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No response body"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StapelError"
+                }
+              }
+            },
+            "description": "Not Found",
+            "x-stapel-errors": [
+              "error.404.not_found"
+            ]
+          }
+        },
+        "description": "**Permissions:** `ReadOnlyOrSuperUser`"
+      }
+    },
+    "/geo/api/v1/locations/by-parent/{parent_id}/": {
+      "get": {
+        "operationId": "geo_api_v1_locations_by_parent_list",
+        "summary": "Children of a location",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "parent_id",
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d+$"
+            },
+            "required": true
+          }
+        ],
+        "tags": [
+          "Locations"
+        ],
+        "security": [
+          {
+            "JWTCookieAuth": []
+          },
+          {
+            "JWTBearerAuth": []
+          },
+          {}
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/LocationCompact"
+                  }
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "description": "**Permissions:** `ReadOnlyOrSuperUser`"
+      }
+    },
+    "/geo/api/v1/locations/countries/": {
+      "get": {
+        "operationId": "geo_api_v1_locations_countries_list",
+        "summary": "Countries (root locations)",
+        "tags": [
+          "Locations"
+        ],
+        "security": [
+          {
+            "JWTCookieAuth": []
+          },
+          {
+            "JWTBearerAuth": []
+          },
+          {}
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/LocationCompact"
+                  }
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "description": "**Permissions:** `ReadOnlyOrSuperUser`"
+      }
+    },
+    "/geo/api/v1/locations/nearby-by-coords/": {
+      "get": {
+        "operationId": "geo_api_v1_locations_nearby_by_coords_list",
+        "summary": "Find nearby locations by coordinates",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "lat",
+            "schema": {
+              "type": "number",
+              "format": "float"
+            },
+            "required": true
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "lon",
+            "schema": {
+              "type": "number",
+              "format": "float"
+            },
+            "required": true
+          },
+          {
+            "in": "query",
+            "name": "precision",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "tags": [
+          "Locations"
+        ],
+        "security": [
+          {
+            "JWTCookieAuth": []
+          },
+          {
+            "JWTBearerAuth": []
+          },
+          {}
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/LocationCompact"
+                  }
+                }
+              }
+            },
+            "description": ""
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StapelError"
+                }
+              }
+            },
+            "description": "Bad Request",
+            "x-stapel-errors": [
+              "error.400.invalid_params",
+              "error.400.lat_lon_required"
+            ]
+          }
+        },
+        "description": "**Permissions:** `ReadOnlyOrSuperUser`"
+      }
+    },
+    "/geo/api/v1/locations/nearby-by-geohash/": {
+      "get": {
+        "operationId": "geo_api_v1_locations_nearby_by_geohash_list",
+        "summary": "Find nearby locations by geohash",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "geohash",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "tags": [
+          "Locations"
+        ],
+        "security": [
+          {
+            "JWTCookieAuth": []
+          },
+          {
+            "JWTBearerAuth": []
+          },
+          {}
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/LocationCompact"
+                  }
+                }
+              }
+            },
+            "description": ""
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StapelError"
+                }
+              }
+            },
+            "description": "Bad Request",
+            "x-stapel-errors": [
+              "error.400.geohash_required",
+              "error.400.invalid_params"
+            ]
+          }
+        },
+        "description": "**Permissions:** `ReadOnlyOrSuperUser`"
+      }
+    },
+    "/geo/api/v1/locations/validate-uuid/{uuid}/": {
+      "get": {
+        "operationId": "geo_api_v1_locations_validate_uuid_retrieve",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "uuid",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true
+          }
+        ],
+        "tags": [
+          "Locations"
+        ],
+        "security": [
+          {
+            "JWTCookieAuth": []
+          },
+          {
+            "JWTBearerAuth": []
+          },
+          {}
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidateUuidResponse"
+                },
+                "examples": {
+                  "ValidateUuidResponse": {
+                    "value": {
+                      "valid": true,
+                      "uuid": "550e8400-e29b-41d4-a716-446655440000"
+                    }
+                  }
+                }
+              }
+            },
+            "description": ""
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StapelError"
+                }
+              }
+            },
+            "description": "Bad Request",
+            "x-stapel-errors": [
+              "error.400.uuid_required"
+            ]
+          }
+        },
+        "description": "**Permissions:** `ReadOnlyOrSuperUser`"
+      }
+    },
+    "/geo/api/v1/map/config": {
+      "get": {
+        "operationId": "geo_api_v1_map_config_retrieve",
+        "description": "Basemap + picker configuration. Public: a map renders before login.\n\n**Permissions:** `AllowAny`",
+        "summary": "Basemap and location-picker configuration",
+        "tags": [
+          "Map"
+        ],
+        "security": [
+          {
+            "JWTCookieAuth": []
+          },
+          {
+            "JWTBearerAuth": []
+          },
+          {}
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MapConfig"
+                },
+                "examples": {
+                  "MapConfig": {
+                    "value": {
+                      "tiles": {
+                        "url_template": "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+                        "subdomains": [],
+                        "attribution_html": "&copy; OpenStreetMap contributors",
+                        "attribution_text": "© OpenStreetMap contributors",
+                        "policy_url": "https://operations.osmfoundation.org/policies/tiles/",
+                        "requires_attribution": true,
+                        "min_zoom": 2,
+                        "max_zoom": 19
+                      },
+                      "default_center": [
+                        55.7558,
+                        37.6173
+                      ],
+                      "default_zoom": 13,
+                      "picked_zoom": 17,
+                      "bbox": null,
+                      "geolocation": true,
+                      "search_min_chars": 3,
+                      "search_debounce_ms": 350,
+                      "geohash_precision": 8,
+                      "endpoints": {
+                        "search": "api/v1/geocoding/search",
+                        "structured": "api/v1/geocoding/structured",
+                        "reverse": "api/v1/geocoding/reverse",
+                        "resolve": "api/v1/geocoding/resolve",
+                        "locations_nearby": "api/v1/locations/nearby-by-coords",
+                        "ip": "api/v1/ip"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "x-stapel-flows": [
+          "geo.pick_location"
+        ]
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "GeocodeFeature": {
+        "type": "object",
+        "description": "A single geocoded result feature.",
+        "properties": {
+          "type": {
+            "type": "string",
+            "description": "GeoJSON type",
+            "example": "Feature"
+          },
+          "geometry": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/GeocodeGeometry"
+              }
+            ],
+            "description": "Point geometry with coordinates"
+          },
+          "properties": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/GeocodeProperties"
+              }
+            ],
+            "description": "Place properties (name, address components, OSM data)"
+          }
+        },
+        "required": [
+          "geometry",
+          "properties",
+          "type"
+        ]
+      },
+      "GeocodeGeometry": {
+        "type": "object",
+        "description": "GeoJSON point geometry.",
+        "properties": {
+          "type": {
+            "type": "string",
+            "description": "Geometry type",
+            "example": "Point"
+          },
+          "coordinates": {
+            "type": "array",
+            "items": {
+              "type": "number",
+              "format": "double"
+            },
+            "description": "[longitude, latitude]",
+            "example": [
+              13.38333,
+              52.51667
+            ]
+          }
+        },
+        "required": [
+          "coordinates",
+          "type"
+        ]
+      },
+      "GeocodeProperties": {
+        "type": "object",
+        "description": "Properties of a geocoded feature.",
+        "properties": {
+          "formatted": {
+            "type": "string",
+            "nullable": true,
+            "description": "One-line human label built by STAPEL_GEO[\"ADDRESS_FORMATTER\"]",
+            "example": "Unter den Linden, 1, Berlin, Germany"
+          },
+          "name": {
+            "type": "string",
+            "nullable": true,
+            "description": "Place name",
+            "example": "Berlin"
+          },
+          "country": {
+            "type": "string",
+            "nullable": true,
+            "description": "Country name",
+            "example": "Germany"
+          },
+          "countrycode": {
+            "type": "string",
+            "nullable": true,
+            "description": "ISO 3166-1 alpha-2 code",
+            "example": "DE"
+          },
+          "osm_key": {
+            "type": "string",
+            "nullable": true,
+            "description": "OSM tag key",
+            "example": "place"
+          },
+          "osm_value": {
+            "type": "string",
+            "nullable": true,
+            "description": "OSM tag value",
+            "example": "city"
+          },
+          "osm_type": {
+            "type": "string",
+            "nullable": true,
+            "description": "OSM element type (N/W/R)",
+            "example": "R"
+          },
+          "osm_id": {
+            "type": "integer",
+            "nullable": true,
+            "description": "OSM element ID",
+            "example": 240109189
+          },
+          "state": {
+            "type": "string",
+            "nullable": true,
+            "description": "State or region",
+            "example": "Brandenburg"
+          },
+          "county": {
+            "type": "string",
+            "nullable": true,
+            "description": "County name",
+            "example": "Kreisfreie Stadt Berlin"
+          },
+          "city": {
+            "type": "string",
+            "nullable": true,
+            "description": "City name",
+            "example": "Berlin"
+          },
+          "district": {
+            "type": "string",
+            "nullable": true,
+            "description": "District or suburb",
+            "example": "Mitte"
+          },
+          "street": {
+            "type": "string",
+            "nullable": true,
+            "description": "Street name",
+            "example": "Unter den Linden"
+          },
+          "housenumber": {
+            "type": "string",
+            "nullable": true,
+            "description": "House number",
+            "example": 1
+          },
+          "postcode": {
+            "type": "string",
+            "nullable": true,
+            "description": "Postal code",
+            "example": 10117
+          },
+          "extent": {
+            "type": "array",
+            "items": {
+              "type": "number",
+              "format": "double"
+            },
+            "nullable": true,
+            "description": "Bounding box [minLon, minLat, maxLon, maxLat]",
+            "example": [
+              13.08,
+              52.33,
+              13.76,
+              52.68
+            ]
+          }
+        }
+      },
+      "GeocodeResponse": {
+        "type": "object",
+        "description": "GeoJSON FeatureCollection with geocoding results.",
+        "properties": {
+          "type": {
+            "type": "string",
+            "description": "GeoJSON type",
+            "example": "FeatureCollection"
+          },
+          "features": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GeocodeFeature"
+            },
+            "description": "List of geocoded features"
+          },
+          "lang": {
+            "type": "string",
+            "nullable": true,
+            "description": "Language actually asked of the provider after clamping (may differ from the requested one)",
+            "example": "default"
+          }
+        }
+      },
+      "IpLocation": {
+        "type": "object",
+        "description": "A guess at where the caller is, with its provenance attached.",
+        "properties": {
+          "lat": {
+            "type": "number",
+            "format": "double",
+            "description": "Latitude of the point a map should open on",
+            "example": 55.7558
+          },
+          "lon": {
+            "type": "number",
+            "format": "double",
+            "description": "Longitude of the point a map should open on",
+            "example": 37.6173
+          },
+          "source": {
+            "type": "string",
+            "description": "Which locator answered — a provider name, or \"fallback\"",
+            "example": "maxmind"
+          },
+          "precision": {
+            "type": "string",
+            "description": "How specific the answer is: city, region, country or default",
+            "example": "city"
+          },
+          "ip_resolved": {
+            "type": "boolean",
+            "description": "Whether this came from the caller's address at all",
+            "example": true
+          },
+          "label": {
+            "type": "string",
+            "nullable": true,
+            "description": "One human line for the place, or null when there is none to show",
+            "example": "Moscow, Russia"
+          },
+          "city": {
+            "type": "string",
+            "nullable": true,
+            "description": "City name when the locator knows one",
+            "example": "Moscow"
+          },
+          "region": {
+            "type": "string",
+            "nullable": true,
+            "description": "First-level subdivision when the locator knows one",
+            "example": "Moscow"
+          },
+          "country": {
+            "type": "string",
+            "nullable": true,
+            "description": "Country name when the locator knows one",
+            "example": "Russia"
+          },
+          "country_code": {
+            "type": "string",
+            "nullable": true,
+            "description": "ISO-3166-1 alpha-2 country code",
+            "example": "RU"
+          },
+          "accuracy_radius_km": {
+            "type": "number",
+            "format": "double",
+            "nullable": true,
+            "description": "Radius the provider itself claims, when it claims one",
+            "example": 20
+          }
+        },
+        "required": [
+          "lat",
+          "lon",
+          "source"
+        ]
+      },
+      "Location": {
+        "type": "object",
+        "description": "Full Location representation — a flat point plus tree metadata.",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "readOnly": true
+          },
+          "uuid": {
+            "type": "string",
+            "format": "uuid",
+            "readOnly": true
+          },
+          "name": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 100
+          },
+          "type": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 100
+          },
+          "country": {
+            "type": "string",
+            "maxLength": 255
+          },
+          "lat": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "lon": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "geohash": {
+            "type": "string",
+            "readOnly": true,
+            "nullable": true
+          },
+          "tn_parent": {
+            "type": "integer",
+            "nullable": true,
+            "title": "Parent"
+          },
+          "display_name_narrow": {
+            "type": "string",
+            "readOnly": true
+          },
+          "display_name_broad": {
+            "type": "string",
+            "readOnly": true
+          }
+        },
+        "required": [
+          "display_name_broad",
+          "display_name_narrow",
+          "geohash",
+          "id",
+          "uuid"
+        ]
+      },
+      "LocationCompact": {
+        "type": "object",
+        "description": "Lightweight Location representation; nearby adds distance_km.",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "readOnly": true
+          },
+          "uuid": {
+            "type": "string",
+            "format": "uuid",
+            "readOnly": true
+          },
+          "name": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 100
+          },
+          "type": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 100
+          },
+          "country": {
+            "type": "string",
+            "maxLength": 255
+          },
+          "geohash": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 12
+          },
+          "tn_parent": {
+            "type": "integer",
+            "nullable": true,
+            "title": "Parent"
+          },
+          "display_name_narrow": {
+            "type": "string",
+            "maxLength": 255
+          },
+          "display_name_broad": {
+            "type": "string",
+            "maxLength": 255
+          },
+          "distance_km": {
+            "type": "number",
+            "format": "double",
+            "readOnly": true,
+            "nullable": true
+          }
+        },
+        "required": [
+          "distance_km",
+          "id",
+          "uuid"
+        ]
+      },
+      "MapConfig": {
+        "type": "object",
+        "description": "Everything the default location picker needs before its first frame.",
+        "properties": {
+          "tiles": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/TileLayer"
+              }
+            ],
+            "description": "The basemap layer and its attribution obligations"
+          },
+          "default_zoom": {
+            "type": "integer",
+            "description": "Opening zoom level",
+            "example": 13
+          },
+          "picked_zoom": {
+            "type": "integer",
+            "description": "Zoom to settle on once a place has been chosen",
+            "example": 17
+          },
+          "geolocation": {
+            "type": "boolean",
+            "description": "Whether the skin should offer the browser's position prompt",
+            "example": true
+          },
+          "search_min_chars": {
+            "type": "integer",
+            "description": "Characters before search-as-you-type fires",
+            "example": 3
+          },
+          "search_debounce_ms": {
+            "type": "integer",
+            "description": "Idle time before a keystroke becomes a request",
+            "example": 350
+          },
+          "geohash_precision": {
+            "type": "integer",
+            "description": "Precision of the geohash the server stamps on a resolved point",
+            "example": 8
+          },
+          "endpoints": {
+            "type": "object",
+            "additionalProperties": {},
+            "description": "Absolute-from-mount paths of the verbs the picker calls"
+          },
+          "default_center": {
+            "type": "array",
+            "items": {
+              "type": "number",
+              "format": "double"
+            },
+            "nullable": true,
+            "description": "Opening centre as [lat, lon], or null for \"no opinion\"",
+            "example": [
+              55.7558,
+              37.6173
+            ]
+          },
+          "bbox": {
+            "type": "array",
+            "items": {
+              "type": "number",
+              "format": "double"
+            },
+            "nullable": true,
+            "description": "Operating area as [min_lon, min_lat, max_lon, max_lat], or null for worldwide",
+            "example": [
+              19.6,
+              41.2,
+              190.0,
+              81.9
+            ]
+          }
+        },
+        "required": [
+          "default_zoom",
+          "endpoints",
+          "geohash_precision",
+          "geolocation",
+          "picked_zoom",
+          "search_debounce_ms",
+          "search_min_chars",
+          "tiles"
+        ]
+      },
+      "PatchedLocation": {
+        "type": "object",
+        "description": "Full Location representation — a flat point plus tree metadata.",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "readOnly": true
+          },
+          "uuid": {
+            "type": "string",
+            "format": "uuid",
+            "readOnly": true
+          },
+          "name": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 100
+          },
+          "type": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 100
+          },
+          "country": {
+            "type": "string",
+            "maxLength": 255
+          },
+          "lat": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "lon": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "geohash": {
+            "type": "string",
+            "readOnly": true,
+            "nullable": true
+          },
+          "tn_parent": {
+            "type": "integer",
+            "nullable": true,
+            "title": "Parent"
+          },
+          "display_name_narrow": {
+            "type": "string",
+            "readOnly": true
+          },
+          "display_name_broad": {
+            "type": "string",
+            "readOnly": true
+          }
+        }
+      },
+      "PlaceResolution": {
+        "type": "object",
+        "description": "Everything a location picker needs to CONFIRM one point, in one call.\n\nThe answer to \"the browser gave me a coordinate / the user dropped a\npin — now what do I show them?\". One round trip: reverse geocoding,\nthe display line, the address components, the alternatives to offer if\nthe top pick is wrong, the geohash to store, and (opt-in) the nearest\nknown locations from the tree.",
+        "properties": {
+          "lat": {
+            "type": "number",
+            "format": "double",
+            "description": "Latitude that was resolved (echoed, so the client can match the answer to its request)",
+            "example": 52.51667
+          },
+          "lon": {
+            "type": "number",
+            "format": "double",
+            "description": "Longitude that was resolved",
+            "example": 13.38333
+          },
+          "geohash": {
+            "type": "string",
+            "description": "Geohash of the point at STAPEL_GEO[\"GEOHASH_PRECISION\"] — what a consumer stores",
+            "example": "u33dc0cp"
+          },
+          "lang": {
+            "type": "string",
+            "nullable": true,
+            "description": "Language actually used upstream after clamping",
+            "example": "default"
+          },
+          "formatted": {
+            "type": "string",
+            "nullable": true,
+            "description": "One-line human label of the best candidate",
+            "example": "Unter den Linden, 1, Berlin, Germany"
+          },
+          "address": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/GeocodeProperties"
+              }
+            ],
+            "nullable": true,
+            "description": "Address components of the best candidate"
+          },
+          "feature": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/GeocodeFeature"
+              }
+            ],
+            "nullable": true,
+            "description": "The best candidate as a GeoJSON feature (its coordinates are the geocoder's snapped point, which may differ from lat/lon)"
+          },
+          "alternatives": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GeocodeFeature"
+            },
+            "description": "Further candidates, best-first, for a \"not this one?\" list"
+          },
+          "nearest": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PlaceSummary"
+            },
+            "description": "Known Location rows near the point (only when ``nearest`` was requested)"
+          }
+        },
+        "required": [
+          "geohash",
+          "lat",
+          "lon"
+        ]
+      },
+      "PlaceSummary": {
+        "type": "object",
+        "description": "A known ``Location`` row near a resolved point (reference data).",
+        "properties": {
+          "uuid": {
+            "type": "string",
+            "description": "Cross-service location UUID",
+            "example": "550e8400-e29b-41d4-a716-446655440000"
+          },
+          "name": {
+            "type": "string",
+            "nullable": true,
+            "description": "Location name",
+            "example": "Berlin"
+          },
+          "country": {
+            "type": "string",
+            "description": "Country name",
+            "example": "Germany"
+          },
+          "display_name": {
+            "type": "string",
+            "description": "Human label of the tree node",
+            "example": "Berlin (City in Germany)"
+          },
+          "distance_km": {
+            "type": "number",
+            "format": "double",
+            "nullable": true,
+            "description": "Great-circle distance from the resolved point",
+            "example": 1.42
+          }
+        },
+        "required": [
+          "uuid"
+        ]
+      },
+      "StapelError": {
+        "type": "object",
+        "description": "Structured error returned by all Stapel API endpoints.",
+        "properties": {
+          "localizable_error": {
+            "type": "string",
+            "description": "Translation key for client-side localization",
+            "example": "error.404.not_found"
+          },
+          "error": {
+            "type": "string",
+            "description": "Human-readable fallback/debug message — not reliably English,"
+          },
+          "params": {
+            "type": "object",
+            "additionalProperties": {},
+            "description": "Context values for template placeholders",
+            "example": {
+              "retry_after": 30
+            }
+          },
+          "error_language": {
+            "type": "string",
+            "description": "The language `error` is written in (e.g. 'en', 'ru'),"
+          }
+        },
+        "required": [
+          "error",
+          "localizable_error"
+        ]
+      },
+      "TileLayer": {
+        "type": "object",
+        "description": "The raster basemap a picker is allowed to draw.",
+        "properties": {
+          "url_template": {
+            "type": "string",
+            "description": "Tile URL with {z}/{x}/{y} (and optional {s}) placeholders",
+            "example": "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+          },
+          "attribution_html": {
+            "type": "string",
+            "description": "Credit line as HTML — a licence obligation, always render one",
+            "example": "&copy; OpenStreetMap contributors"
+          },
+          "attribution_text": {
+            "type": "string",
+            "description": "Same credit as plain text (canvas, print, native)",
+            "example": "© OpenStreetMap contributors"
+          },
+          "subdomains": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Shards for the {s} placeholder, empty when unused",
+            "example": [
+              "a",
+              "b",
+              "c"
+            ]
+          },
+          "policy_url": {
+            "type": "string",
+            "nullable": true,
+            "description": "The tile provider's usage policy",
+            "example": "https://operations.osmfoundation.org/policies/tiles/"
+          },
+          "requires_attribution": {
+            "type": "boolean",
+            "description": "Whether the credit line must be visible",
+            "example": true
+          },
+          "min_zoom": {
+            "type": "integer",
+            "description": "Lowest zoom level the layer serves",
+            "example": 2
+          },
+          "max_zoom": {
+            "type": "integer",
+            "description": "Highest zoom level the layer serves",
+            "example": 19
+          }
+        },
+        "required": [
+          "attribution_html",
+          "attribution_text",
+          "url_template"
+        ]
+      },
+      "ValidateUuidResponse": {
+        "type": "object",
+        "description": "UUID validation result for cross-service reference checks.",
+        "properties": {
+          "valid": {
+            "type": "boolean",
+            "description": "Whether the UUID exists",
+            "example": true
+          },
+          "uuid": {
+            "type": "string",
+            "description": "The validated UUID string",
+            "example": "550e8400-e29b-41d4-a716-446655440000"
+          }
+        },
+        "required": [
+          "uuid",
+          "valid"
+        ]
+      }
+    },
+    "securitySchemes": {
+      "JWTBearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "JWT access token in the `Authorization: Bearer <token>` header — the credential a native client sends. When the JWT cookie is also present, the cookie wins."
+      },
+      "JWTCookieAuth": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "stapel_jwt",
+        "description": "JWT token stored in cookie. Login via /auth/admin/ to get the cookie."
+      }
+    }
+  }
+}

@@ -917,22 +917,35 @@
                 "examples": {
                   "MapConfig": {
                     "value": {
-                      "default_zoom": 13,
-                      "picked_zoom": 17,
-                      "geolocation": true,
-                      "search_min_chars": 3,
-                      "search_debounce_ms": 350,
-                      "geohash_precision": 8,
+                      "tiles": {
+                        "url_template": "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+                        "subdomains": [],
+                        "attribution_html": "&copy; OpenStreetMap contributors",
+                        "attribution_text": "© OpenStreetMap contributors",
+                        "policy_url": "https://operations.osmfoundation.org/policies/tiles/",
+                        "requires_attribution": true,
+                        "min_zoom": 2,
+                        "max_zoom": 19
+                      },
                       "default_center": [
                         55.7558,
                         37.6173
                       ],
-                      "bbox": [
-                        19.6,
-                        41.2,
-                        190.0,
-                        81.9
-                      ]
+                      "default_zoom": 13,
+                      "picked_zoom": 17,
+                      "bbox": null,
+                      "geolocation": true,
+                      "search_min_chars": 3,
+                      "search_debounce_ms": 350,
+                      "geohash_precision": 8,
+                      "endpoints": {
+                        "search": "api/v1/geocoding/search",
+                        "structured": "api/v1/geocoding/structured",
+                        "reverse": "api/v1/geocoding/reverse",
+                        "resolve": "api/v1/geocoding/resolve",
+                        "locations_nearby": "api/v1/locations/nearby-by-coords",
+                        "ip": "api/v1/ip"
+                      }
                     }
                   }
                 }
